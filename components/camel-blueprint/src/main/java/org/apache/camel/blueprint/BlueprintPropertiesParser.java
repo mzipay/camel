@@ -159,10 +159,6 @@ public class BlueprintPropertiesParser extends DefaultPropertiesParser {
                 log.debug("Delegate property parser parsed the property key: {} as value: {}", key, answer);
             }
         }
-        
-        if (answer == null) {
-            throw new IllegalArgumentException("Property placeholder key: " + key + " not found");
-        }
 
         log.trace("Returning parsed property key: {} as value: {}", key, answer);
         return answer;
