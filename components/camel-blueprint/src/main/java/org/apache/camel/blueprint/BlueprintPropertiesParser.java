@@ -55,6 +55,7 @@ public class BlueprintPropertiesParser extends DefaultPropertiesParser {
         this.propertiesComponent = propertiesComponent;
         this.container = container;
         this.delegate = delegate;
+        log.warn("using PATCHED BlueprintPropertiesParser to support fallbackToUnaugmentedProperty (see CAMEL-10038)");
     }
 
     /**
@@ -160,10 +161,6 @@ public class BlueprintPropertiesParser extends DefaultPropertiesParser {
             }
         }
         
-        if (answer == null) {
-            throw new IllegalArgumentException("Property placeholder key: " + key + " not found");
-        }
-
         log.trace("Returning parsed property key: {} as value: {}", key, answer);
         return answer;
     }
