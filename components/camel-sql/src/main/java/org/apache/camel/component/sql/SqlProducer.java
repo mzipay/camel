@@ -280,6 +280,8 @@ public class SqlProducer extends DefaultProducer {
             if (isResultSet) {
                 rs = ps.getResultSet();
                 ResultSetIterator iterator = getEndpoint().queryForStreamList(con, ps, rs);
+                //pass through all headers
+                exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
                 if (getEndpoint().isNoop()) {
                     exchange.getOut().setBody(exchange.getIn().getBody());
                 } else if (getEndpoint().getOutputHeader() != null) {
