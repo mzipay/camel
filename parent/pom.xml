@@ -36,12 +36,12 @@
     <abdera-version>1.1.3</abdera-version>
     <!-- Note that activemq dependency is only used for testing! -->
     <activemq-version>5.13.4</activemq-version>
-    <ahc-version>2.0.10</ahc-version>
+    <ahc-version>2.0.11</ahc-version>
     <ant-bundle-version>1.7.0_6</ant-bundle-version>
     <antlr-bundle-version>3.5.2_1</antlr-bundle-version>
     <antlr-runtime-bundle-version>3.5.2_1</antlr-runtime-bundle-version>
     <aopalliance-bundle-version>1.0_6</aopalliance-bundle-version>
-    <apacheds-version>2.0.0-M22</apacheds-version>
+    <apacheds-version>2.0.0-M23</apacheds-version>
     <apache-gora-version>0.6.1</apache-gora-version>
     <apache-mime4j-version>0.7.2</apache-mime4j-version>
     <aries-blueprint-api-version>1.0.1</aries-blueprint-api-version>
@@ -97,14 +97,14 @@
     <cdi-api-1.2-version>1.2</cdi-api-1.2-version>
     <cglib-bundle-version>3.2.2_1</cglib-bundle-version>
     <cglib-version>3.2.2</cglib-version>
-    <chronicle-bytes-version>1.7.2</chronicle-bytes-version>
+    <chronicle-bytes-version>1.7.4</chronicle-bytes-version>
     <chronicle-core-version>1.7.2</chronicle-core-version>
-    <chronicle-engine-version>1.13.3</chronicle-engine-version>
+    <chronicle-engine-version>1.13.5</chronicle-engine-version>
     <chronicle-map-version>2.4.15</chronicle-map-version>
     <chronicle-network-version>1.7.1</chronicle-network-version>
     <chronicle-queue-version>4.5.2</chronicle-queue-version>
-    <chronicle-threads-version>1.7.0</chronicle-threads-version>
-    <chronicle-wire-version>1.7.4</chronicle-wire-version>
+    <chronicle-threads-version>1.7.2</chronicle-threads-version>
+    <chronicle-wire-version>1.7.5</chronicle-wire-version>
     <chunk-templates-version>3.2.0</chunk-templates-version>
     <chunk-templates-bundle-version>3.2.0_1</chunk-templates-bundle-version>
     <classmate-version>1.3.1</classmate-version>
@@ -277,7 +277,7 @@
     <jackson-version>1.9.12</jackson-version>
     <jackson-spark-version>2.4.5</jackson-spark-version>
     <jackson2-scala-version>2.6.1</jackson2-scala-version>
-    <jackson2-version>2.8.0</jackson2-version>
+    <jackson2-version>2.8.1</jackson2-version>
     <jackrabbit-version>2.13.1</jackrabbit-version>
     <jackrabbit-guava-version>15.0</jackrabbit-guava-version>
     <jain-sip-ri-bundle-version>1.2.154_2</jain-sip-ri-bundle-version>
@@ -335,7 +335,7 @@
     <jolokia-version>1.3.3</jolokia-version>
     <jolt-version>0.0.21</jolt-version>
     <jolt-bundle-version>0.0.21_1</jolt-bundle-version>
-    <johnzon-version>0.9.3-incubating</johnzon-version>
+    <johnzon-version>0.9.4</johnzon-version>
     <josql-bundle-version>1.5_5</josql-bundle-version>
     <josql-version>1.5</josql-version>
     <jruby-version>1.7.18</jruby-version>
@@ -426,7 +426,7 @@
     <minimal-json-version>0.9.4</minimal-json-version>
     <mock-javamail-version>1.9</mock-javamail-version>
     <mockito-version>1.9.5</mockito-version>
-    <mongo-java-driver-version>3.2.2</mongo-java-driver-version>
+    <mongo-java-driver-version>3.3.0</mongo-java-driver-version>
     <mongo-hadoop-version>1.5.0</mongo-hadoop-version>
     <mqtt-client-version>1.14</mqtt-client-version>
     <msv-version>2013.6.1</msv-version>
@@ -496,7 +496,7 @@
     <roaster-version>2.19.0.Final</roaster-version>
     <rome-bundle-version>1.0_3</rome-bundle-version>
     <rome-version>1.0</rome-version>
-    <rxjava-version>1.1.7</rxjava-version>
+    <rxjava-version>1.1.8</rxjava-version>
     <saaj-impl-version>1.3.2_2</saaj-impl-version>
     <saxon-bundle-version>9.5.1-5_1</saxon-bundle-version>
     <saxon-version>9.5.1-5</saxon-version>
@@ -630,7 +630,6 @@
     <xom-version>1.2.5</xom-version>
     <yammer-metrics-version>2.2.0</yammer-metrics-version>
     <zjsonpatch-version>0.2.3</zjsonpatch-version>
-    <zkclient-version>0.8</zkclient-version>
     <zookeeper-version>3.4.8</zookeeper-version>
     <zxing-version>3.2.1</zxing-version>
     <zxing-bundle-version>3.2.1_1</zxing-bundle-version>
@@ -1629,6 +1628,11 @@
       <dependency>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-solr</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.camel</groupId>
+        <artifactId>camel-spark</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
