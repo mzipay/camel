@@ -45,10 +45,10 @@ The Camel application can be stopped pressing <kbd>ctrl</kbd>+<kbd>c</kbd> in th
 
 #### OSGi / Karaf
 
-This example can be executed within Karaf 2.x, 3.x and 4.x. Note that it uses
+This example can be executed within Karaf 4.x. Note that it uses
 the `pax-cdi-weld` feature from the PAX CDI version used by Camel and which defines
-the Weld version used. For instance, Camel `2.17.0` depends on PAX CDI `1.0.0.RC1`
-whose `pax-cdi-weld` feature relies on Weld version `2.2.11.Final`.
+the Weld version used. For instance, Camel `${version}` depends on PAX CDI `${pax-cdi-version}`
+and related `pax-cdi-weld` feature.
 
 To run the example, from the command line:
 
@@ -61,15 +61,15 @@ To run the example, from the command line:
 2. Install the pre-requisites:
 
     ```sh
-    karaf@root()> repo-add camel 2.17.0
-    karaf@root()> repo-add activemq 5.13.2
+    karaf@root()> repo-add camel ${version}
+    karaf@root()> repo-add activemq ${activemq-version}
     karaf@root()> feature:install activemq-broker-noweb pax-cdi-weld camel-sjms camel-cdi
     ```
 
 3. Then install and start the example:
 
     ```sh
-    karaf@root()> install -s mvn:org.apache.camel/camel-example-cdi-osgi/2.17.0
+    karaf@root()> install -s mvn:org.apache.camel.example/camel-example-cdi-osgi/${version}
     ```
 
 By tailing the log with:
@@ -114,15 +114,14 @@ context, e.g.:
      osgi-example   Started                   1              0              0   1 minute  
     ```
 
-- The `camel:route-list` command displays the Camel route configured
-  by the `RouteBuilder` bean:
+- The `camel:route-list` command displays the Camel route configured by the `RouteBuilder` bean:
 
     ```
     karaf@root()> camel:route-list
-     Context        Route            Status              Total #       Failed #     Inflight #   Uptime        
-     -------        -----            ------              -------       --------     ----------   ------        
+     Context        Route            Status              Total #       Failed #     Inflight #   Uptime     
+     -------        -----            ------              -------       --------     ----------   ------      
      osgi-example   consumer-route   Started                   1              0              0   3 minutes
-     ```
+    ```
 
 - And the `camel:route-info` command displays the exchange completed
   when the `CamelContextStartedEvent` CDI event is fired:

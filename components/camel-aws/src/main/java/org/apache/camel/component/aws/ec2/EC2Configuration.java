@@ -28,20 +28,23 @@ public class EC2Configuration {
 
     @UriPath(description = "Logical name") @Metadata(required = "true")
     private String label;
-    @UriParam
+    @UriParam(label = "producer")
     private AmazonEC2Client amazonEc2Client;
-    @UriParam
+    @UriParam(label = "producer", secret = true)
     private String accessKey;
-    @UriParam
+    @UriParam(label = "producer", secret = true)
     private String secretKey;
-    @UriParam
+    @UriParam(label = "producer")
     private String amazonEc2Endpoint;
-    @UriParam @Metadata(required = "true")
+    @UriParam(label = "producer")
+    @Metadata(required = "true")
     private EC2Operations operation;
-    @UriParam
+    @UriParam(label = "producer")
     private String proxyHost;
-    @UriParam
+    @UriParam(label = "producer")
     private Integer proxyPort;
+    @UriParam
+    private String region;
     
     public AmazonEC2Client getAmazonEc2Client() {
         return amazonEc2Client;
@@ -92,7 +95,9 @@ public class EC2Configuration {
     }
 
     /**
-     * The operation to perform
+     * The operation to perform. It can be createAndRunInstances, startInstances, stopInstances, terminateInstances, 
+     * describeInstances, describeInstancesStatus, rebootInstances, monitorInstances, unmonitorInstances,  
+     * createTags or deleteTags
      */
     public void setOperation(EC2Operations operation) {
         this.operation = operation;
@@ -118,5 +123,16 @@ public class EC2Configuration {
 
     public void setProxyPort(Integer proxyPort) {
         this.proxyPort = proxyPort;
+    }
+    
+    /**
+     * The region in which EC2 client needs to work
+     */
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
     }
 }

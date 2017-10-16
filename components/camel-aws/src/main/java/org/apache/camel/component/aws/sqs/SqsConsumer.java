@@ -49,12 +49,9 @@ import org.apache.camel.util.URISupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-
 /**
  * A Consumer of messages from the Amazon Web Service Simple Queue Service
  * <a href="http://aws.amazon.com/sqs/">AWS SQS</a>
- * 
  */
 public class SqsConsumer extends ScheduledBatchPollingConsumer {
     
@@ -163,7 +160,7 @@ public class SqsConsumer extends ScheduledBatchPollingConsumer {
             if (this.scheduledExecutor != null && visibilityTimeout != null && (visibilityTimeout.intValue() / 2) > 0) {
                 int delay = visibilityTimeout.intValue() / 2;
                 int period = visibilityTimeout.intValue();
-                int repeatSeconds = new Double(visibilityTimeout.doubleValue() * 1.5).intValue();
+                int repeatSeconds = Double.valueOf(visibilityTimeout.doubleValue() * 1.5).intValue();
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Scheduled TimeoutExtender task to start after {} delay, and run with {}/{} period/repeat (seconds), to extend exchangeId: {}",
                             new Object[]{delay, period, repeatSeconds, exchange.getExchangeId()});
@@ -189,7 +186,6 @@ public class SqsConsumer extends ScheduledBatchPollingConsumer {
                 });
             }
 
-
             // add on completion to handle after work when the exchange is done
             exchange.addOnCompletion(new Synchronization() {
                 public void onComplete(Exchange exchange) {
@@ -205,7 +201,6 @@ public class SqsConsumer extends ScheduledBatchPollingConsumer {
                     return "SqsConsumerOnCompletion";
                 }
             });
-
 
             LOG.trace("Processing exchange [{}]...", exchange);
             getAsyncProcessor().process(exchange, new AsyncCallback() {
@@ -243,10 +238,12 @@ public class SqsConsumer extends ScheduledBatchPollingConsumer {
     }
 
     private boolean shouldDelete(Exchange exchange) {
+        boolean shouldDeleteByFilter = exchange.getProperty(Exchange.FILTER_MATCHED) != null
+                && getConfiguration().isDeleteIfFiltered()
+                && passedThroughFilter(exchange);
+
         return getConfiguration().isDeleteAfterRead()
-                && (getConfiguration().isDeleteIfFiltered()
-                    || (!getConfiguration().isDeleteIfFiltered()
-                        && passedThroughFilter(exchange)));
+                || shouldDeleteByFilter;
     }
 
     private boolean passedThroughFilter(Exchange exchange) {
@@ -292,19 +289,22 @@ public class SqsConsumer extends ScheduledBatchPollingConsumer {
 
     @Override
     protected void doStart() throws Exception {
-        super.doStart();
+        // start scheduler first
         if (getConfiguration().isExtendMessageVisibility() && scheduledExecutor == null) {
             this.scheduledExecutor = getEndpoint().getCamelContext().getExecutorServiceManager().newSingleThreadScheduledExecutor(this, "SqsTimeoutExtender");
         }
+
+        super.doStart();
     }
 
     @Override
     protected void doShutdown() throws Exception {
-        super.doShutdown();
         if (scheduledExecutor != null) {
             getEndpoint().getCamelContext().getExecutorServiceManager().shutdownNow(scheduledExecutor);
             scheduledExecutor = null;
         }
+
+        super.doShutdown();
     }
 
     private class TimeoutExtender implements Runnable {

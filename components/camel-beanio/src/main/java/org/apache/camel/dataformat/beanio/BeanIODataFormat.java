@@ -31,6 +31,7 @@ import java.util.Properties;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.Exchange;
+import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.DataFormatName;
 import org.apache.camel.support.ServiceSupport;
@@ -41,16 +42,15 @@ import org.beanio.BeanReader;
 import org.beanio.BeanReaderErrorHandler;
 import org.beanio.BeanWriter;
 import org.beanio.StreamFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.beanio.Unmarshaller;
+
+import static org.apache.camel.dataformat.beanio.BeanIOHelper.getOrCreateBeanReaderErrorHandler;
 
 /**
  * A <a href="http://camel.apache.org/data-format.html">data format</a> (
  * {@link DataFormat}) for beanio data.
  */
 public class BeanIODataFormat extends ServiceSupport implements DataFormat, DataFormatName, CamelContextAware {
-
-    private static final Logger LOG = LoggerFactory.getLogger(BeanIODataFormat.class);
 
     private transient CamelContext camelContext;
     private transient StreamFactory factory;
@@ -113,7 +113,11 @@ public class BeanIODataFormat extends ServiceSupport implements DataFormat, Data
     }
 
     public Object unmarshal(Exchange exchange, InputStream stream) throws Exception {
-        return readModels(exchange, stream);
+        if (isUnmarshalSingleObject()) {
+            return readSingleModel(exchange, stream);
+        } else {
+            return readModels(exchange, stream);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -141,19 +145,16 @@ public class BeanIODataFormat extends ServiceSupport implements DataFormat, Data
         out.close();
     }
 
-    private List<Object> readModels(Exchange exchange, InputStream stream) {
+    private List<Object> readModels(Exchange exchange, InputStream stream) throws Exception {
         List<Object> results = new ArrayList<Object>();
         BufferedReader streamReader = IOHelper.buffered(new InputStreamReader(stream, getEncoding()));
 
         BeanReader in = factory.createReader(getStreamName(), streamReader);
 
-        try {
-            if (ObjectHelper.isNotEmpty(configuration.getBeanReaderErrorHandler())) {
-                in.setErrorHandler(configuration.getBeanReaderErrorHandler());
-            } else {
-                in.setErrorHandler(new BeanIOErrorHandler(configuration));
-            }
+        BeanReaderErrorHandler errorHandler = getOrCreateBeanReaderErrorHandler(configuration, exchange, results, null);
+        in.setErrorHandler(errorHandler);
 
+        try {
             Object readObject;
             while ((readObject = in.read()) != null) {
                 if (readObject instanceof BeanIOHeader) {
@@ -166,6 +167,17 @@ public class BeanIODataFormat extends ServiceSupport implements DataFormat, Data
         }
 
         return results;
+    }
+
+    private Object readSingleModel(Exchange exchange, InputStream stream) throws NoTypeConversionAvailableException {
+        BufferedReader streamReader = IOHelper.buffered(new InputStreamReader(stream, getEncoding()));
+        try {
+            String data = exchange.getContext().getTypeConverter().mandatoryConvertTo(String.class, exchange, streamReader);
+            Unmarshaller unmarshaller = factory.createUnmarshaller(getStreamName());
+            return unmarshaller.unmarshal(data);
+        } finally {
+            IOHelper.close(stream);
+        }
     }
 
     public String getMapping() {
@@ -231,4 +243,25 @@ public class BeanIODataFormat extends ServiceSupport implements DataFormat, Data
     public void setBeanReaderErrorHandler(BeanReaderErrorHandler beanReaderErrorHandler) {
         configuration.setBeanReaderErrorHandler(beanReaderErrorHandler);
     }
+
+    public String getBeanReaderErrorHandlerType() {
+        return configuration.getBeanReaderErrorHandlerType();
+    }
+
+    public void setBeanReaderErrorHandlerType(String beanReaderErrorHandlerType) {
+        configuration.setBeanReaderErrorHandlerType(beanReaderErrorHandlerType);
+    }
+
+    public void setBeanReaderErrorHandlerType(Class<?> beanReaderErrorHandlerType) {
+        configuration.setBeanReaderErrorHandlerType(beanReaderErrorHandlerType);
+    }
+
+    public boolean isUnmarshalSingleObject() {
+        return configuration.isUnmarshalSingleObject();
+    }
+
+    public void setUnmarshalSingleObject(boolean unmarshalSingleObject) {
+        configuration.setUnmarshalSingleObject(unmarshalSingleObject);
+    }
+
 }

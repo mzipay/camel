@@ -25,11 +25,18 @@ import java.util.Set;
 import org.apache.camel.CamelContext;
 import org.apache.camel.ConsumerTemplate;
 import org.apache.camel.Exchange;
+import org.apache.camel.FluentProducerTemplate;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.TypeConverters;
 import org.apache.camel.component.properties.PropertiesComponent;
 import org.apache.camel.component.properties.PropertiesParser;
+import org.apache.camel.ha.CamelClusterService;
+import org.apache.camel.health.HealthCheckRegistry;
+import org.apache.camel.health.HealthCheckRepository;
+import org.apache.camel.health.HealthCheckService;
+import org.apache.camel.impl.FileWatcherReloadStrategy;
 import org.apache.camel.processor.interceptor.BacklogTracer;
+import org.apache.camel.processor.interceptor.DefaultTraceFormatter;
 import org.apache.camel.processor.interceptor.HandleFault;
 import org.apache.camel.processor.interceptor.TraceFormatter;
 import org.apache.camel.processor.interceptor.Tracer;
@@ -42,6 +49,8 @@ import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.ManagementNamingStrategy;
 import org.apache.camel.spi.ManagementStrategy;
+import org.apache.camel.spi.ReloadStrategy;
+import org.apache.camel.spi.RouteController;
 import org.apache.camel.spi.RoutePolicyFactory;
 import org.apache.camel.spi.RuntimeEndpointRegistry;
 import org.apache.camel.spi.ShutdownStrategy;
@@ -50,7 +59,9 @@ import org.apache.camel.spi.ThreadPoolProfile;
 import org.apache.camel.spi.UnitOfWorkFactory;
 import org.apache.camel.spring.CamelBeanPostProcessor;
 import org.apache.camel.spring.SpringCamelContext;
+import org.apache.camel.spring.spi.XmlCamelContextConfigurer;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.jsse.GlobalSSLContextParametersSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -59,6 +70,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.MutablePropertySources;
@@ -71,12 +83,34 @@ public class CamelAutoConfiguration {
     private static final Logger LOG = LoggerFactory.getLogger(CamelAutoConfiguration.class);
 
     /**
+     * Allows to do custom configuration when running XML based Camel in Spring Boot
+     */
+    // must be named xmlCamelContextConfigurer
+    @Bean(name = "xmlCamelContextConfigurer")
+    XmlCamelContextConfigurer springBootCamelContextConfigurer() {
+        return new SpringBootXmlCamelContextConfigurer();
+    }
+
+    /**
      * Spring-aware Camel context for the application. Auto-detects and loads all routes available in the Spring context.
      */
-    @Bean
+    // We explicitly declare the destroyMethod to be "" as the Spring @Bean
+    // annotation defaults to AbstractBeanDefinition.INFER_METHOD otherwise
+    // and in that case CamelContext::shutdown or CamelContext::stop would
+    // be used for bean destruction. As SpringCamelContext is a lifecycle
+    // bean (implements Lifecycle) additional invocations of shutdown or
+    // close would be superfluous.
+    @Bean(destroyMethod = "")
     @ConditionalOnMissingBean(CamelContext.class)
     CamelContext camelContext(ApplicationContext applicationContext,
-                              CamelConfigurationProperties config) {
+                              CamelConfigurationProperties config) throws Exception {
+        CamelContext camelContext = new SpringCamelContext(applicationContext);
+        return doConfigureCamelContext(applicationContext, camelContext, config);
+    }
+
+    static CamelContext doConfigureCamelContext(ApplicationContext applicationContext,
+                                         CamelContext camelContext,
+                                         CamelConfigurationProperties config) throws Exception {
 
         if (ObjectHelper.isNotEmpty(config.getFileConfigurations())) {
             Environment env = applicationContext.getEnvironment();
@@ -90,9 +124,6 @@ public class CamelAutoConfiguration {
             }
         }
 
-        CamelContext camelContext = new SpringCamelContext(applicationContext);
-        SpringCamelContext.setNoStart(true);
-
         if (!config.isJmxEnabled()) {
             camelContext.disableJMX();
         }
@@ -101,8 +132,16 @@ public class CamelAutoConfiguration {
             ((SpringCamelContext) camelContext).setName(config.getName());
         }
 
-        if (config.getLogDebugMaxChars() > 0) {
-            camelContext.getProperties().put(Exchange.LOG_DEBUG_BODY_MAX_CHARS, "" + config.getLogDebugMaxChars());
+        if (config.getShutdownTimeout() > 0) {
+            camelContext.getShutdownStrategy().setTimeout(config.getShutdownTimeout());
+        }
+        camelContext.getShutdownStrategy().setSuppressLoggingOnTimeout(config.isShutdownSuppressLoggingOnTimeout());
+        camelContext.getShutdownStrategy().setShutdownNowOnTimeout(config.isShutdownNowOnTimeout());
+        camelContext.getShutdownStrategy().setShutdownRoutesInReverseOrder(config.isShutdownRoutesInReverseOrder());
+        camelContext.getShutdownStrategy().setLogInflightExchangesOnTimeout(config.isShutdownLogInflightExchangesOnTimeout());
+
+        if (config.getLogDebugMaxChars() != 0) {
+            camelContext.getGlobalOptions().put(Exchange.LOG_DEBUG_BODY_MAX_CHARS, "" + config.getLogDebugMaxChars());
         }
 
         // stream caching
@@ -132,12 +171,16 @@ public class CamelAutoConfiguration {
             camelContext.getStreamCachingStrategy().setSpoolUsedHeapMemoryThreshold(config.getStreamCachingSpoolUsedHeapMemoryThreshold());
         }
 
-        camelContext.setTracing(config.isTracing());
         camelContext.setMessageHistory(config.isMessageHistory());
+        camelContext.setLogMask(config.isLogMask());
         camelContext.setLogExhaustedMessageBody(config.isLogExhaustedMessageBody());
         camelContext.setHandleFault(config.isHandleFault());
         camelContext.setAutoStartup(config.isAutoStartup());
         camelContext.setAllowUseOriginalMessage(config.isAllowUseOriginalMessage());
+        camelContext.setUseBreadcrumb(config.isUseBreadcrumb());
+        camelContext.setUseDataType(config.isUseDataType());
+        camelContext.setUseMDCLogging(config.isUseMDCLogging());
+        camelContext.setLoadTypeConverters(config.isLoadTypeConverters());
 
         if (camelContext.getManagementStrategy().getManagementAgent() != null) {
             camelContext.getManagementStrategy().getManagementAgent().setEndpointRuntimeStatisticsEnabled(config.isEndpointRuntimeStatisticsEnabled());
@@ -147,6 +190,40 @@ public class CamelAutoConfiguration {
         }
 
         camelContext.setPackageScanClassResolver(new FatJarPackageScanClassResolver());
+
+        // tracing
+        camelContext.setTracing(config.isTracing());
+        if (camelContext.getDefaultTracer() instanceof Tracer) {
+            Tracer tracer = (Tracer) camelContext.getDefaultTracer();
+            if (tracer.getDefaultTraceFormatter() != null) {
+                DefaultTraceFormatter formatter = tracer.getDefaultTraceFormatter();
+                if (config.getTracerFormatterBreadCrumbLength() != null) {
+                    formatter.setBreadCrumbLength(config.getTracerFormatterBreadCrumbLength());
+                }
+                if (config.getTracerFormatterMaxChars() != null) {
+                    formatter.setMaxChars(config.getTracerFormatterMaxChars());
+                }
+                if (config.getTracerFormatterNodeLength() != null) {
+                    formatter.setNodeLength(config.getTracerFormatterNodeLength());
+                }
+                formatter.setShowBody(config.isTraceFormatterShowBody());
+                formatter.setShowBodyType(config.isTracerFormatterShowBodyType());
+                formatter.setShowBreadCrumb(config.isTraceFormatterShowBreadCrumb());
+                formatter.setShowException(config.isTraceFormatterShowException());
+                formatter.setShowExchangeId(config.isTraceFormatterShowExchangeId());
+                formatter.setShowExchangePattern(config.isTraceFormatterShowExchangePattern());
+                formatter.setShowHeaders(config.isTraceFormatterShowHeaders());
+                formatter.setShowNode(config.isTraceFormatterShowNode());
+                formatter.setShowProperties(config.isTraceFormatterShowProperties());
+                formatter.setShowRouteId(config.isTraceFormatterShowRouteId());
+                formatter.setShowShortExchangeId(config.isTraceFormatterShowShortExchangeId());
+            }
+        }
+
+        if (config.getXmlRoutesReloadDirectory() != null) {
+            ReloadStrategy reload = new FileWatcherReloadStrategy(config.getXmlRoutesReloadDirectory());
+            camelContext.setReloadStrategy(reload);
+        }
 
         // additional advanced configuration which is not configured using CamelConfigurationProperties
         afterPropertiesSet(applicationContext, camelContext);
@@ -167,25 +244,63 @@ public class CamelAutoConfiguration {
     }
 
     /**
-     * Default producer template for the bootstrapped Camel context.
+     * Default fluent producer template for the bootstrapped Camel context.
+     * Create the bean lazy as it should only be created if its in-use.
      */
-    @Bean(initMethod = "", destroyMethod = "")
-    // Camel handles the lifecycle of this bean
+    // We explicitly declare the destroyMethod to be "" as the Spring @Bean
+    // annotation defaults to AbstractBeanDefinition.INFER_METHOD otherwise
+    // and in that case Service::close (FluentProducerTemplate implements Service)
+    // would be used for bean destruction. And we want Camel to handle the
+    // lifecycle.
+    @Bean(destroyMethod = "")
+    @ConditionalOnMissingBean(FluentProducerTemplate.class)
+    @Lazy
+    FluentProducerTemplate fluentProducerTemplate(CamelContext camelContext,
+                                                 CamelConfigurationProperties config) throws Exception {
+        final FluentProducerTemplate fluentProducerTemplate = camelContext.createFluentProducerTemplate(config.getProducerTemplateCacheSize());
+        // we add this fluentProducerTemplate as a Service to CamelContext so that it performs proper lifecycle (start and stop)
+        camelContext.addService(fluentProducerTemplate);
+        return fluentProducerTemplate;
+    }
+
+    /**
+     * Default producer template for the bootstrapped Camel context.
+     * Create the bean lazy as it should only be created if its in-use.
+     */
+    // We explicitly declare the destroyMethod to be "" as the Spring @Bean
+    // annotation defaults to AbstractBeanDefinition.INFER_METHOD otherwise
+    // and in that case Service::close (ProducerTemplate implements Service)
+    // would be used for bean destruction. And we want Camel to handle the
+    // lifecycle.
+    @Bean(destroyMethod = "")
     @ConditionalOnMissingBean(ProducerTemplate.class)
+    @Lazy
     ProducerTemplate producerTemplate(CamelContext camelContext,
-                                      CamelConfigurationProperties config) {
-        return camelContext.createProducerTemplate(config.getProducerTemplateCacheSize());
+                                      CamelConfigurationProperties config) throws Exception {
+        final ProducerTemplate producerTemplate = camelContext.createProducerTemplate(config.getProducerTemplateCacheSize());
+        // we add this producerTemplate as a Service to CamelContext so that it performs proper lifecycle (start and stop)
+        camelContext.addService(producerTemplate);
+        return producerTemplate;
     }
 
     /**
      * Default consumer template for the bootstrapped Camel context.
+     * Create the bean lazy as it should only be created if its in-use.
      */
-    @Bean(initMethod = "", destroyMethod = "")
-    // Camel handles the lifecycle of this bean
+    // We explicitly declare the destroyMethod to be "" as the Spring @Bean
+    // annotation defaults to AbstractBeanDefinition.INFER_METHOD otherwise
+    // and in that case Service::close (ConsumerTemplate implements Service)
+    // would be used for bean destruction. And we want Camel to handle the
+    // lifecycle.
+    @Bean(destroyMethod = "")
     @ConditionalOnMissingBean(ConsumerTemplate.class)
+    @Lazy
     ConsumerTemplate consumerTemplate(CamelContext camelContext,
-                                      CamelConfigurationProperties config) {
-        return camelContext.createConsumerTemplate(config.getConsumerTemplateCacheSize());
+                                      CamelConfigurationProperties config) throws Exception {
+        final ConsumerTemplate consumerTemplate = camelContext.createConsumerTemplate(config.getConsumerTemplateCacheSize());
+        // we add this consumerTemplate as a Service to CamelContext so that it performs proper lifecycle (start and stop)
+        camelContext.addService(consumerTemplate);
+        return consumerTemplate;
     }
 
     // SpringCamelContext integration
@@ -195,8 +310,12 @@ public class CamelAutoConfiguration {
         return new SpringPropertiesParser();
     }
 
-    @Bean(initMethod = "", destroyMethod = "")
-    // Camel handles the lifecycle of this bean
+    // We explicitly declare the destroyMethod to be "" as the Spring @Bean
+    // annotation defaults to AbstractBeanDefinition.INFER_METHOD otherwise
+    // and in that case ShutdownableService::shutdown/Service::close
+    // (PropertiesComponent extends ServiceSupport) would be used for bean
+    // destruction. And we want Camel to handle the lifecycle.
+    @Bean(destroyMethod = "")
     PropertiesComponent properties(CamelContext camelContext, PropertiesParser parser) {
         if (camelContext.hasComponent("properties") != null) {
             return camelContext.getComponent("properties", PropertiesComponent.class);
@@ -223,7 +342,7 @@ public class CamelAutoConfiguration {
      * <p/>
      * Similar code in camel-core-xml module in class org.apache.camel.core.xml.AbstractCamelContextFactoryBean.
      */
-    void afterPropertiesSet(ApplicationContext applicationContext, CamelContext camelContext) {
+    static void afterPropertiesSet(ApplicationContext applicationContext, CamelContext camelContext) throws Exception {
         Tracer tracer = getSingleBeanOfType(applicationContext, Tracer.class);
         if (tracer != null) {
             // use formatter if there is a TraceFormatter bean defined
@@ -339,6 +458,15 @@ public class CamelAutoConfiguration {
                 }
             }
         }
+        // cluster service
+        Map<String, CamelClusterService> clusterServices = applicationContext.getBeansOfType(CamelClusterService.class);
+        if (clusterServices != null && !clusterServices.isEmpty()) {
+            for (Map.Entry<String, CamelClusterService> entry : clusterServices.entrySet()) {
+                CamelClusterService service = entry.getValue();
+                LOG.info("Using CamelClusterService with id: {} and implementation: {}", service.getId(), service);
+                camelContext.addService(service);
+            }
+        }
         // add route policy factories
         Map<String, RoutePolicyFactory> routePolicyFactories = applicationContext.getBeansOfType(RoutePolicyFactory.class);
         if (routePolicyFactories != null && !routePolicyFactories.isEmpty()) {
@@ -348,12 +476,46 @@ public class CamelAutoConfiguration {
                 camelContext.addRoutePolicyFactory(factory);
             }
         }
+        // add SSL context parameters
+        GlobalSSLContextParametersSupplier sslContextParametersSupplier = getSingleBeanOfType(applicationContext, GlobalSSLContextParametersSupplier.class);
+        if (sslContextParametersSupplier != null) {
+            camelContext.setSSLContextParameters(sslContextParametersSupplier.get());
+        }
+        // Health check registry
+        HealthCheckRegistry healthCheckRegistry = getSingleBeanOfType(applicationContext, HealthCheckRegistry.class);
+        if (healthCheckRegistry != null) {
+            healthCheckRegistry.setCamelContext(camelContext);
+            LOG.info("Using HealthCheckRegistry: {}", healthCheckRegistry);
+            camelContext.setHealthCheckRegistry(healthCheckRegistry);
+        } else {
+            healthCheckRegistry = camelContext.getHealthCheckRegistry();
+            healthCheckRegistry.setCamelContext(camelContext);
+        }
+        // Health check repository
+        Map<String, HealthCheckRepository> repositories = applicationContext.getBeansOfType(HealthCheckRepository.class);
+        if (ObjectHelper.isNotEmpty(repositories)) {
+            for (HealthCheckRepository repository: repositories.values()) {
+                healthCheckRegistry.addRepository(repository);
+            }
+        }
+        // Health check service
+        HealthCheckService healthCheckService = getSingleBeanOfType(applicationContext, HealthCheckService.class);
+        if (healthCheckService != null) {
+            LOG.info("Using HealthCheckService: {}", healthCheckService);
+            camelContext.addService(healthCheckService);
+        }
+        // Route controller
+        RouteController routeController = getSingleBeanOfType(applicationContext, RouteController.class);
+        if (routeController != null) {
+            LOG.info("Using RouteController: " + routeController);
+            camelContext.setRouteController(routeController);
+        }
 
         // set the default thread pool profile if defined
         initThreadPoolProfiles(applicationContext, camelContext);
     }
 
-    private void initThreadPoolProfiles(ApplicationContext applicationContext, CamelContext camelContext) {
+    private static void initThreadPoolProfiles(ApplicationContext applicationContext, CamelContext camelContext) {
         Set<String> defaultIds = new HashSet<String>();
 
         // lookup and use custom profiles from the registry
@@ -378,7 +540,7 @@ public class CamelAutoConfiguration {
         }
     }
 
-    private <T> T getSingleBeanOfType(ApplicationContext applicationContext, Class<T> type) {
+    private static <T> T getSingleBeanOfType(ApplicationContext applicationContext, Class<T> type) {
         Map<String, T> beans = applicationContext.getBeansOfType(type);
         if (beans.size() == 1) {
             return beans.values().iterator().next();

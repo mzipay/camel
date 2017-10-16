@@ -30,9 +30,9 @@ import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
 
 /**
- * Boon data format
+ * Boon data format is used for unmarshal a JSon payload to POJO or to marshal POJO back to JSon payload.
  */
-@Metadata(label = "dataformat,transformation,json", title = "Boon")
+@Metadata(firstVersion = "2.16.0", label = "dataformat,transformation,json", title = "Boon")
 @XmlRootElement(name = "boon")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class BoonDataFormat extends DataFormatDefinition {

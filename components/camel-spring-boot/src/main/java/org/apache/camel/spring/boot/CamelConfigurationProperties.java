@@ -30,6 +30,43 @@ public class CamelConfigurationProperties {
     private String name;
 
     /**
+     * Timeout in seconds to graceful shutdown Camel.
+     */
+    private int shutdownTimeout = 300;
+
+    /**
+     * Whether Camel should try to suppress logging during shutdown and timeout was triggered,
+     * meaning forced shutdown is happening. And during forced shutdown we want to avoid logging
+     * errors/warnings et all in the logs as a side-effect of the forced timeout.
+     * <p/>
+     * By default this is <tt>false</tt>
+     * <p/>
+     * Notice the suppress is a <i>best effort</i> as there may still be some logs coming
+     * from 3rd party libraries and whatnot, which Camel cannot control.
+     */
+    private boolean shutdownSuppressLoggingOnTimeout;
+
+    /**
+     * Sets whether to force shutdown of all consumers when a timeout occurred and thus
+     * not all consumers was shutdown within that period.
+     * <p/>
+     * You should have good reasons to set this option to <tt>false</tt> as it means that the routes
+     * keep running and is halted abruptly when CamelContext has been shutdown.
+     */
+    private boolean shutdownNowOnTimeout = true;
+
+    /**
+     * Sets whether routes should be shutdown in reverse or the same order as they where started.
+     */
+    private boolean shutdownRoutesInReverseOrder = true;
+
+    /**
+     * Sets whether to log information about the inflight Exchanges which are still running
+     * during a shutdown which didn't complete without the given timeout.
+     */
+    private boolean shutdownLogInflightExchangesOnTimeout = true;
+
+    /**
      * Enable JMX in your Camel application.
      */
     private boolean jmxEnabled = true;
@@ -50,6 +87,45 @@ public class CamelConfigurationProperties {
     private boolean typeConversion = true;
 
     /**
+     * Sets whether to load custom type converters by scanning classpath.
+     * This can be turned off if you are only using Camel components
+     * that does not provide type converters which is needed at runtime.
+     * In such situations setting this option to false, can speedup starting
+     * Camel.
+     */
+    private boolean loadTypeConverters = true;
+
+    /**
+     * Used for inclusive filtering component scanning of RouteBuilder classes with @Component annotation.
+     * The exclusive filtering takes precedence over inclusive filtering.
+     * The pattern is using Ant-path style pattern.
+     * <p/>
+     * Multiple patterns can be specified separated by comma.
+     * For example to include all classes starting with Foo use <tt>&#42;&#42;/Foo*</tt>.
+     * To include all routes form a specific package use, <tt>com/mycompany/foo/*</tt>
+     * To include all routes form a specific package and its sub-packages use double wildcards, <tt>com/mycompany/foo/**</tt>
+     * And to include all routes from two specific packages use, <tt>com/mycompany/foo/*,com/mycompany/stuff/*</tt>
+     *
+     * @see org.springframework.util.AntPathMatcher
+     */
+    private String javaRoutesIncludePattern;
+
+    /**
+     * Used for exclusive filtering component scanning of RouteBuilder classes with @Component annotation.
+     * The exclusive filtering takes precedence over inclusive filtering.
+     * The pattern is using Ant-path style pattern.
+     * Multiple patterns can be specified separated by comma.
+     * <p/>
+     * For example to exclude all classes starting with Bar use <tt>&#42;&#42;/Bar*</tt>.
+     * To exclude all routes form a specific package use, <tt>com/mycompany/bar/*</tt>
+     * To exclude all routes form a specific package and its sub-packages use double wildcards, <tt>com/mycompany/bar/**</tt>
+     * And to exclude all routes from two specific packages use, <tt>com/mycompany/bar/*,com/mycompany/stuff/*</tt>
+     *
+     * @see org.springframework.util.AntPathMatcher
+     */
+    private String javaRoutesExcludePattern;
+
+    /**
      * Directory to scan for adding additional XML routes.
      * You can turn this off by setting the value to false.
      */
@@ -60,6 +136,15 @@ public class CamelConfigurationProperties {
      * You can turn this off by setting the value to false.
      */
     private String xmlRests = "classpath:camel-rest/*.xml";
+
+    /**
+     * To watch the directory for file changes which triggers
+     * a live reload of the Camel routes on-the-fly.
+     * <p/>
+     * For example configure this to point to the source code where the Camel XML files are located
+     * such as: src/main/resources/camel/
+     */
+    private String xmlRoutesReloadDirectory;
 
     /**
      * Directory to load additional configuration files that contains
@@ -82,9 +167,33 @@ public class CamelConfigurationProperties {
     private boolean mainRunController;
 
     /**
+     * To specify for how long time in seconds to keep running the JVM before automatic terminating the JVM.
+     * You can use this to run Spring Boot for a short while.
+     */
+    private int durationMaxSeconds;
+
+    /**
+     * To specify for how long time in seconds Camel can be idle before automatic terminating the JVM.
+     * You can use this to run Spring Boot for a short while.
+     */
+    private int durationMaxIdleSeconds;
+
+    /**
+     * To specify how many messages to process by Camel before automatic terminating the JVM.
+     * You can use this to run Spring Boot for a short while.
+     */
+    private int durationMaxMessages;
+
+    /**
+     * Whether to include non-singleton beans (prototypes) when scanning for RouteBuilder instances.
+     * By default only singleton beans is included in the context scan.
+     */
+    private boolean includeNonSingletons;
+
+    /**
      * Is used to limit the maximum length of the logging Camel message bodies. If the message body
-     * is longer than the limit, the log message is clipped. Use a value of 0 or negative to have unlimited length.
-     * Use for example 1000 to log at at most 1000 chars.
+     * is longer than the limit, the log message is clipped. Use -1 to have unlimited length.
+     * Use for example 1000 to log at most 1000 characters.
      */
     private int logDebugMaxChars;
 
@@ -182,6 +291,13 @@ public class CamelConfigurationProperties {
     private boolean messageHistory = true;
 
     /**
+     * Sets whether log mask is enabled or not.
+     *
+     * Default is false.
+     */
+    private boolean logMask;
+
+    /**
      * Sets whether to log exhausted message body with message history.
      *
      * Default is false.
@@ -212,16 +328,29 @@ public class CamelConfigurationProperties {
      * or from org.apache.camel.spi.UnitOfWork.getOriginalInMessage().
      * Turning this off can optimize performance, as defensive copy of the original message is not needed.
      *
-     * Default is true.
+     * Default is false.
      */
-    private boolean allowUseOriginalMessage = true;
+    private boolean allowUseOriginalMessage;
 
     /**
      * Sets whether endpoint runtime statistics is enabled (gathers runtime usage of each incoming and outgoing endpoints).
      *
-     * The default value is true.
+     * The default value is false.
      */
-    private boolean endpointRuntimeStatisticsEnabled = true;
+    private boolean endpointRuntimeStatisticsEnabled;
+
+    /**
+     * Whether to enable using data type on Camel messages.
+     * <p/>
+     * Data type are automatic turned on if one ore more routes has been explicit configured with input and output types.
+     * Otherwise data type is default off.
+     */
+    private boolean useDataType;
+
+    /**
+     * Set whether breadcrumb is enabled.
+     */
+    private boolean useBreadcrumb = true;
 
     /**
      * Sets the JMX statistics level
@@ -245,6 +374,81 @@ public class CamelConfigurationProperties {
      */
     private boolean jmxCreateConnector;
 
+    /**
+     * Tracer should output message body
+     */
+    private boolean traceFormatterShowBody = true;
+
+    /**
+     * Tracer should output message body type
+     */
+    private boolean tracerFormatterShowBodyType = true;
+
+    /**
+     * Tracer should output breadcrumb
+     */
+    private boolean traceFormatterShowBreadCrumb = true;
+
+    /**
+     * Tracer should output exchange id
+     */
+    private boolean traceFormatterShowExchangeId;
+
+    /**
+     * Tracer should output message headers
+     */
+    private boolean traceFormatterShowHeaders = true;
+
+    /**
+     * Tracer should output exchange properties
+     */
+    private boolean traceFormatterShowProperties;
+
+    /**
+     * Tracer should output EIP node
+     */
+    private boolean traceFormatterShowNode = true;
+
+    /**
+     * Tracer should output message exchange pattern (MEP)
+     */
+    private boolean traceFormatterShowExchangePattern = true;
+
+    /**
+     * Tracer should output exception
+     */
+    private boolean traceFormatterShowException = true;
+
+    /**
+     * Tracer should output route id
+     */
+    private boolean traceFormatterShowRouteId = true;
+
+    /**
+     * Tracer maximum length of breadcrumb ids
+     */
+    private Integer tracerFormatterBreadCrumbLength;
+
+    /**
+     * Tracer should output short exchange id
+     */
+    private boolean traceFormatterShowShortExchangeId;
+
+    /**
+     * Tracer maximum length of node
+     */
+    private Integer tracerFormatterNodeLength;
+
+    /**
+     * Tracer maximum characters in total
+     */
+    private Integer tracerFormatterMaxChars = 10000;
+    
+    /**
+     * To turn on MDC logging
+     */
+    private boolean useMDCLogging;
+
     // Getters & setters
 
     public String getName() {
@@ -253,6 +457,46 @@ public class CamelConfigurationProperties {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public int getShutdownTimeout() {
+        return shutdownTimeout;
+    }
+
+    public void setShutdownTimeout(int shutdownTimeout) {
+        this.shutdownTimeout = shutdownTimeout;
+    }
+
+    public boolean isShutdownSuppressLoggingOnTimeout() {
+        return shutdownSuppressLoggingOnTimeout;
+    }
+
+    public void setShutdownSuppressLoggingOnTimeout(boolean shutdownSuppressLoggingOnTimeout) {
+        this.shutdownSuppressLoggingOnTimeout = shutdownSuppressLoggingOnTimeout;
+    }
+
+    public boolean isShutdownNowOnTimeout() {
+        return shutdownNowOnTimeout;
+    }
+
+    public void setShutdownNowOnTimeout(boolean shutdownNowOnTimeout) {
+        this.shutdownNowOnTimeout = shutdownNowOnTimeout;
+    }
+
+    public boolean isShutdownRoutesInReverseOrder() {
+        return shutdownRoutesInReverseOrder;
+    }
+
+    public void setShutdownRoutesInReverseOrder(boolean shutdownRoutesInReverseOrder) {
+        this.shutdownRoutesInReverseOrder = shutdownRoutesInReverseOrder;
+    }
+
+    public boolean isShutdownLogInflightExchangesOnTimeout() {
+        return shutdownLogInflightExchangesOnTimeout;
+    }
+
+    public void setShutdownLogInflightExchangesOnTimeout(boolean shutdownLogInflightExchangesOnTimeout) {
+        this.shutdownLogInflightExchangesOnTimeout = shutdownLogInflightExchangesOnTimeout;
     }
 
     public boolean isJmxEnabled() {
@@ -287,6 +531,30 @@ public class CamelConfigurationProperties {
         this.typeConversion = typeConversion;
     }
 
+    public boolean isLoadTypeConverters() {
+        return loadTypeConverters;
+    }
+
+    public void setLoadTypeConverters(boolean loadTypeConverters) {
+        this.loadTypeConverters = loadTypeConverters;
+    }
+
+    public String getJavaRoutesIncludePattern() {
+        return javaRoutesIncludePattern;
+    }
+
+    public void setJavaRoutesIncludePattern(String javaRoutesIncludePattern) {
+        this.javaRoutesIncludePattern = javaRoutesIncludePattern;
+    }
+
+    public String getJavaRoutesExcludePattern() {
+        return javaRoutesExcludePattern;
+    }
+
+    public void setJavaRoutesExcludePattern(String javaRoutesExcludePattern) {
+        this.javaRoutesExcludePattern = javaRoutesExcludePattern;
+    }
+
     public String getXmlRoutes() {
         return xmlRoutes;
     }
@@ -303,12 +571,44 @@ public class CamelConfigurationProperties {
         this.xmlRests = xmlRests;
     }
 
+    public String getXmlRoutesReloadDirectory() {
+        return xmlRoutesReloadDirectory;
+    }
+
+    public void setXmlRoutesReloadDirectory(String xmlRoutesReloadDirectory) {
+        this.xmlRoutesReloadDirectory = xmlRoutesReloadDirectory;
+    }
+
     public boolean isMainRunController() {
         return mainRunController;
     }
 
     public void setMainRunController(boolean mainRunController) {
         this.mainRunController = mainRunController;
+    }
+
+    public int getDurationMaxSeconds() {
+        return durationMaxSeconds;
+    }
+
+    public void setDurationMaxSeconds(int durationMaxSeconds) {
+        this.durationMaxSeconds = durationMaxSeconds;
+    }
+
+    public int getDurationMaxIdleSeconds() {
+        return durationMaxIdleSeconds;
+    }
+
+    public void setDurationMaxIdleSeconds(int durationMaxIdleSeconds) {
+        this.durationMaxIdleSeconds = durationMaxIdleSeconds;
+    }
+
+    public int getDurationMaxMessages() {
+        return durationMaxMessages;
+    }
+
+    public void setDurationMaxMessages(int durationMaxMessages) {
+        this.durationMaxMessages = durationMaxMessages;
     }
 
     public int getLogDebugMaxChars() {
@@ -425,6 +725,14 @@ public class CamelConfigurationProperties {
         this.messageHistory = messageHistory;
     }
 
+    public boolean isLogMask() {
+        return logMask;
+    }
+
+    public void setLogMask(boolean logMask) {
+        this.logMask = logMask;
+    }
+
     public boolean isLogExhaustedMessageBody() {
         return logExhaustedMessageBody;
     }
@@ -465,6 +773,22 @@ public class CamelConfigurationProperties {
         this.endpointRuntimeStatisticsEnabled = endpointRuntimeStatisticsEnabled;
     }
 
+    public boolean isUseDataType() {
+        return useDataType;
+    }
+
+    public void setUseDataType(boolean useDataType) {
+        this.useDataType = useDataType;
+    }
+
+    public boolean isUseBreadcrumb() {
+        return useBreadcrumb;
+    }
+
+    public void setUseBreadcrumb(boolean useBreadcrumb) {
+        this.useBreadcrumb = useBreadcrumb;
+    }
+
     public ManagementStatisticsLevel getJmxManagementStatisticsLevel() {
         return jmxManagementStatisticsLevel;
     }
@@ -495,5 +819,133 @@ public class CamelConfigurationProperties {
 
     public void setFileConfigurations(String fileConfigurations) {
         this.fileConfigurations = fileConfigurations;
+    }
+
+    public boolean isTraceFormatterShowBody() {
+        return traceFormatterShowBody;
+    }
+
+    public void setTraceFormatterShowBody(boolean traceFormatterShowBody) {
+        this.traceFormatterShowBody = traceFormatterShowBody;
+    }
+
+    public boolean isTracerFormatterShowBodyType() {
+        return tracerFormatterShowBodyType;
+    }
+
+    public void setTracerFormatterShowBodyType(boolean tracerFormatterShowBodyType) {
+        this.tracerFormatterShowBodyType = tracerFormatterShowBodyType;
+    }
+
+    public boolean isTraceFormatterShowBreadCrumb() {
+        return traceFormatterShowBreadCrumb;
+    }
+
+    public void setTraceFormatterShowBreadCrumb(boolean traceFormatterShowBreadCrumb) {
+        this.traceFormatterShowBreadCrumb = traceFormatterShowBreadCrumb;
+    }
+
+    public boolean isTraceFormatterShowExchangeId() {
+        return traceFormatterShowExchangeId;
+    }
+
+    public void setTraceFormatterShowExchangeId(boolean traceFormatterShowExchangeId) {
+        this.traceFormatterShowExchangeId = traceFormatterShowExchangeId;
+    }
+
+    public boolean isTraceFormatterShowHeaders() {
+        return traceFormatterShowHeaders;
+    }
+
+    public void setTraceFormatterShowHeaders(boolean traceFormatterShowHeaders) {
+        this.traceFormatterShowHeaders = traceFormatterShowHeaders;
+    }
+
+    public boolean isTraceFormatterShowProperties() {
+        return traceFormatterShowProperties;
+    }
+
+    public void setTraceFormatterShowProperties(boolean traceFormatterShowProperties) {
+        this.traceFormatterShowProperties = traceFormatterShowProperties;
+    }
+
+    public boolean isTraceFormatterShowNode() {
+        return traceFormatterShowNode;
+    }
+
+    public void setTraceFormatterShowNode(boolean traceFormatterShowNode) {
+        this.traceFormatterShowNode = traceFormatterShowNode;
+    }
+
+    public boolean isTraceFormatterShowExchangePattern() {
+        return traceFormatterShowExchangePattern;
+    }
+
+    public void setTraceFormatterShowExchangePattern(boolean traceFormatterShowExchangePattern) {
+        this.traceFormatterShowExchangePattern = traceFormatterShowExchangePattern;
+    }
+
+    public boolean isTraceFormatterShowException() {
+        return traceFormatterShowException;
+    }
+
+    public void setTraceFormatterShowException(boolean traceFormatterShowException) {
+        this.traceFormatterShowException = traceFormatterShowException;
+    }
+
+    public boolean isTraceFormatterShowRouteId() {
+        return traceFormatterShowRouteId;
+    }
+
+    public void setTraceFormatterShowRouteId(boolean traceFormatterShowRouteId) {
+        this.traceFormatterShowRouteId = traceFormatterShowRouteId;
+    }
+
+    public Integer getTracerFormatterBreadCrumbLength() {
+        return tracerFormatterBreadCrumbLength;
+    }
+
+    public void setTracerFormatterBreadCrumbLength(Integer tracerFormatterBreadCrumbLength) {
+        this.tracerFormatterBreadCrumbLength = tracerFormatterBreadCrumbLength;
+    }
+
+    public boolean isTraceFormatterShowShortExchangeId() {
+        return traceFormatterShowShortExchangeId;
+    }
+
+    public void setTraceFormatterShowShortExchangeId(boolean traceFormatterShowShortExchangeId) {
+        this.traceFormatterShowShortExchangeId = traceFormatterShowShortExchangeId;
+    }
+
+    public Integer getTracerFormatterNodeLength() {
+        return tracerFormatterNodeLength;
+    }
+
+    public void setTracerFormatterNodeLength(Integer tracerFormatterNodeLength) {
+        this.tracerFormatterNodeLength = tracerFormatterNodeLength;
+    }
+
+    public Integer getTracerFormatterMaxChars() {
+        return tracerFormatterMaxChars;
+    }
+
+    public void setTracerFormatterMaxChars(Integer tracerFormatterMaxChars) {
+        this.tracerFormatterMaxChars = tracerFormatterMaxChars;
+    }
+
+    public boolean isIncludeNonSingletons() {
+        return includeNonSingletons;
+    }
+
+    public void setIncludeNonSingletons(boolean includeNonSingletons) {
+        this.includeNonSingletons = includeNonSingletons;
+    }
+    
+    public boolean isUseMDCLogging() {
+        return useMDCLogging;
+    }
+    
+    public void setUseMDCLogging(boolean useMDCLogging) {
+        this.useMDCLogging = useMDCLogging;
     }
 }

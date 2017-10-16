@@ -16,8 +16,8 @@
  */
 package org.apache.camel.component.mail;
 
+import java.io.IOException;
 import java.util.Map;
-import javax.activation.DataHandler;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 
@@ -94,7 +94,9 @@ public class MailMessage extends DefaultMessage {
 
     @Override
     public MailMessage newInstance() {
-        return new MailMessage(null, this.mapMailMessage);
+        MailMessage answer = new MailMessage(null, this.mapMailMessage);
+        answer.setCamelContext(getCamelContext());
+        return answer;
     }
 
     @Override
@@ -115,6 +117,8 @@ public class MailMessage extends DefaultMessage {
                     map.putAll(binding.extractHeadersFromMail(mailMessage, getExchange()));
                 }
             } catch (MessagingException e) {
+                throw new RuntimeCamelException("Error accessing headers due to: " + e.getMessage(), e);
+            } catch (IOException e) {
                 throw new RuntimeCamelException("Error accessing headers due to: " + e.getMessage(), e);
             }
         }

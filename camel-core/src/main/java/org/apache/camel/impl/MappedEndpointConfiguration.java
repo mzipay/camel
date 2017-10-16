@@ -17,7 +17,6 @@
 package org.apache.camel.impl;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +32,7 @@ import org.apache.camel.util.UnsafeUriCharactersEncoder;
  * Fallback implementation of {@link EndpointConfiguration} used by {@link Component}s
  * that did not yet define a configuration type.
  */
+@Deprecated
 public final class MappedEndpointConfiguration extends DefaultEndpointConfiguration {
     // TODO: need 2 sets to differentiate between user keys and fixed keys
     private Map<String, Object> params = new LinkedHashMap<String, Object>();
@@ -129,11 +129,11 @@ public final class MappedEndpointConfiguration extends DefaultEndpointConfigurat
             }
         }
 
-        Collections.sort(queryParams);
-        String q = "";
+        queryParams.sort(null);
+        StringBuilder q = new StringBuilder();
         for (String entry : queryParams) {
-            q += q.length() == 0 ? "" : "&";
-            q += entry;
+            q.append(q.length() == 0 ? "" : "&");
+            q.append(entry);
         }
 
         StringBuilder u = new StringBuilder(64);

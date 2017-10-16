@@ -18,35 +18,45 @@ package org.apache.camel.component.undertow;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
+
+import javax.activation.FileDataSource;
 
 import io.undertow.client.ClientExchange;
 import io.undertow.client.ClientRequest;
 import io.undertow.client.ClientResponse;
 import io.undertow.predicate.Predicate;
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.form.FormData;
+import io.undertow.server.handlers.form.FormData.FormValue;
+import io.undertow.server.handlers.form.FormDataParser;
+import io.undertow.util.HeaderMap;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 import io.undertow.util.Methods;
-import io.undertow.util.MimeMappings;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.TypeConverter;
+import org.apache.camel.impl.DefaultAttachment;
 import org.apache.camel.impl.DefaultMessage;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.util.ExchangeHelper;
+import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.MessageHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xnio.ChannelListener;
+import org.xnio.channels.BlockingReadableByteChannel;
 import org.xnio.channels.StreamSourceChannel;
 
 /**
@@ -59,13 +69,16 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
 
     //use default filter strategy from Camel HTTP
     private HeaderFilterStrategy headerFilterStrategy;
+    private Boolean transferException;
 
     public DefaultUndertowHttpBinding() {
         this.headerFilterStrategy = new UndertowHeaderFilterStrategy();
+        this.transferException = Boolean.FALSE;
     }
 
-    public DefaultUndertowHttpBinding(HeaderFilterStrategy headerFilterStrategy) {
+    public DefaultUndertowHttpBinding(HeaderFilterStrategy headerFilterStrategy, Boolean transferException) {
         this.headerFilterStrategy = headerFilterStrategy;
+        this.transferException = transferException;
     }
 
     public HeaderFilterStrategy getHeaderFilterStrategy() {
@@ -76,26 +89,53 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
         this.headerFilterStrategy = headerFilterStrategy;
     }
 
+    public Boolean isTransferException() {
+        return transferException;
+    }
+
+    public void setTransferException(Boolean transferException) {
+        this.transferException = transferException;
+    }
+
     @Override
     public Message toCamelMessage(HttpServerExchange httpExchange, Exchange exchange) throws Exception {
-        Message result = new DefaultMessage();
+        Message result = new DefaultMessage(exchange.getContext());
 
         populateCamelHeaders(httpExchange, result.getHeaders(), exchange);
 
-        //extract body if the method is allowed to have one
-        //body is extracted as byte[] then auto TypeConverter kicks in
-        if (Methods.POST.equals(httpExchange.getRequestMethod()) || Methods.PUT.equals(httpExchange.getRequestMethod())) {
-            result.setBody(readFromChannel(httpExchange.getRequestChannel()));
+        // Map form data which is parsed by undertow form parsers
+        FormData formData = httpExchange.getAttachment(FormDataParser.FORM_DATA);
+        if (formData != null) {
+            Map<String, Object> body = new HashMap<>();
+            formData.forEach(key -> {
+                formData.get(key).forEach(value -> {
+                    if (value.isFile()) {
+                        DefaultAttachment attachment = new DefaultAttachment(new FilePartDataSource(value));
+                        result.addAttachmentObject(key, attachment);
+                        body.put(key, attachment.getDataHandler());
+                    } else if (headerFilterStrategy != null
+                        && !headerFilterStrategy.applyFilterToExternalHeaders(key, value.getValue(), exchange)) {
+                        UndertowHelper.appendHeader(result.getHeaders(), key, value.getValue());
+                        UndertowHelper.appendHeader(body, key, value.getValue());
+                    }
+                });
+            });
+            result.setBody(body);
         } else {
-            result.setBody(null);
+            //extract body by myself if undertow parser didn't handle and the method is allowed to have one
+            //body is extracted as byte[] then auto TypeConverter kicks in
+            if (Methods.POST.equals(httpExchange.getRequestMethod()) || Methods.PUT.equals(httpExchange.getRequestMethod())) {
+                result.setBody(readFromChannel(httpExchange.getRequestChannel()));
+            } else {
+                result.setBody(null);
+            }
         }
-
         return result;
     }
 
     @Override
     public Message toCamelMessage(ClientExchange clientExchange, Exchange exchange) throws Exception {
-        Message result = new DefaultMessage();
+        Message result = new DefaultMessage(exchange.getContext());
 
         //retrieve response headers
         populateCamelHeaders(clientExchange.getResponse(), result.getHeaders(), exchange);
@@ -109,15 +149,6 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
     public void populateCamelHeaders(HttpServerExchange httpExchange, Map<String, Object> headersMap, Exchange exchange) throws Exception {
         LOG.trace("populateCamelHeaders: {}");
 
-        // NOTE: these headers is applied using the same logic as camel-http/camel-jetty to be consistent
-        headersMap.put(Exchange.HTTP_METHOD, httpExchange.getRequestMethod().toString());
-        // strip query parameters from the uri
-        headersMap.put(Exchange.HTTP_URL, httpExchange.getRequestURL());
-        // uri is without the host and port
-        headersMap.put(Exchange.HTTP_URI, httpExchange.getRequestURI());
-        headersMap.put(Exchange.HTTP_QUERY, httpExchange.getQueryString());
-        headersMap.put(Exchange.HTTP_RAW_QUERY, httpExchange.getQueryString());
-
         String path = httpExchange.getRequestPath();
         UndertowEndpoint endpoint = (UndertowEndpoint) exchange.getFromEndpoint();
         if (endpoint.getHttpURI() != null) {
@@ -125,7 +156,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
             String endpointPath = endpoint.getHttpURI().getPath();
             String matchPath = path.toLowerCase(Locale.US);
             String match = endpointPath.toLowerCase(Locale.US);
-            if (match != null && matchPath.startsWith(match)) {
+            if (matchPath.startsWith(match)) {
                 path = path.substring(endpointPath.length());
             }
         }
@@ -148,7 +179,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                 // store a special header that this request was authenticated using HTTP Basic
                 if (value != null && value.trim().startsWith("Basic")) {
                     if (headerFilterStrategy != null
-                        && !headerFilterStrategy.applyFilterToExternalHeaders(Exchange.AUTHENTICATION, "Basic", exchange)) {
+                            && !headerFilterStrategy.applyFilterToExternalHeaders(Exchange.AUTHENTICATION, "Basic", exchange)) {
                         UndertowHelper.appendHeader(headersMap, Exchange.AUTHENTICATION, "Basic");
                     }
                 }
@@ -160,7 +191,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                 Object value = it.next();
                 LOG.trace("HTTP-header: {}", value);
                 if (headerFilterStrategy != null
-                    && !headerFilterStrategy.applyFilterToExternalHeaders(name.toString(), value, exchange)) {
+                        && !headerFilterStrategy.applyFilterToExternalHeaders(name.toString(), value, exchange)) {
                     UndertowHelper.appendHeader(headersMap, name.toString(), value);
                 }
             }
@@ -179,7 +210,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                     Object value = it.next();
                     LOG.trace("URI-Parameter: {}", value);
                     if (headerFilterStrategy != null
-                        && !headerFilterStrategy.applyFilterToExternalHeaders(name, value, exchange)) {
+                            && !headerFilterStrategy.applyFilterToExternalHeaders(name, value, exchange)) {
                         UndertowHelper.appendHeader(headersMap, name, value);
                     }
                 }
@@ -197,6 +228,15 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                 headersMap.put(paramName, predicateContextParams.get(paramName));
             }
         }
+
+        // NOTE: these headers is applied using the same logic as camel-http/camel-jetty to be consistent
+        headersMap.put(Exchange.HTTP_METHOD, httpExchange.getRequestMethod().toString());
+        // strip query parameters from the uri
+        headersMap.put(Exchange.HTTP_URL, httpExchange.getRequestURL());
+        // uri is without the host and port
+        headersMap.put(Exchange.HTTP_URI, httpExchange.getRequestURI());
+        headersMap.put(Exchange.HTTP_QUERY, httpExchange.getQueryString());
+        headersMap.put(Exchange.HTTP_RAW_QUERY, httpExchange.getQueryString());
     }
 
     @Override
@@ -217,7 +257,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                 // store a special header that this request was authenticated using HTTP Basic
                 if (value != null && value.trim().startsWith("Basic")) {
                     if (headerFilterStrategy != null
-                        && !headerFilterStrategy.applyFilterToExternalHeaders(Exchange.AUTHENTICATION, "Basic", exchange)) {
+                            && !headerFilterStrategy.applyFilterToExternalHeaders(Exchange.AUTHENTICATION, "Basic", exchange)) {
                         UndertowHelper.appendHeader(headersMap, Exchange.AUTHENTICATION, "Basic");
                     }
                 }
@@ -229,7 +269,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
                 Object value = it.next();
                 LOG.trace("HTTP-header: {}", value);
                 if (headerFilterStrategy != null
-                    && !headerFilterStrategy.applyFilterToExternalHeaders(name.toString(), value, exchange)) {
+                        && !headerFilterStrategy.applyFilterToExternalHeaders(name.toString(), value, exchange)) {
                     UndertowHelper.appendHeader(headersMap, name.toString(), value);
                 }
             }
@@ -237,13 +277,13 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
     }
 
     @Override
-    public Object toHttpResponse(HttpServerExchange httpExchange, Message message) {
+    public Object toHttpResponse(HttpServerExchange httpExchange, Message message) throws IOException {
         boolean failed = message.getExchange().isFailed();
         int defaultCode = failed ? 500 : 200;
 
         int code = message.getHeader(Exchange.HTTP_RESPONSE_CODE, defaultCode, int.class);
 
-        httpExchange.setResponseCode(code);
+        httpExchange.setStatusCode(code);
 
         TypeConverter tc = message.getExchange().getContext().getTypeConverter();
 
@@ -256,26 +296,43 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
             while (it.hasNext()) {
                 String headerValue = tc.convertTo(String.class, it.next());
                 if (headerValue != null && headerFilterStrategy != null
-                    && !headerFilterStrategy.applyFilterToCamelHeaders(key, headerValue, message.getExchange())) {
+                        && !headerFilterStrategy.applyFilterToCamelHeaders(key, headerValue, message.getExchange())) {
                     LOG.trace("HTTP-Header: {}={}", key, headerValue);
                     httpExchange.getResponseHeaders().add(new HttpString(key), headerValue);
                 }
             }
         }
 
+        Object body = message.getBody();
         Exception exception = message.getExchange().getException();
 
         if (exception != null) {
-            httpExchange.getResponseHeaders().put(Headers.CONTENT_TYPE, MimeMappings.DEFAULT_MIME_MAPPINGS.get("txt"));
+            if (isTransferException()) {
+                // we failed due an exception, and transfer it as java serialized object
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream oos = new ObjectOutputStream(bos);
+                oos.writeObject(exception);
+                oos.flush();
+                IOHelper.close(oos, bos);
 
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            exception.printStackTrace(pw);
+                // the body should be the serialized java object of the exception
+                body = ByteBuffer.wrap(bos.toByteArray());
+                // force content type to be serialized java object
+                message.setHeader(Exchange.CONTENT_TYPE, "application/x-java-serialized-object");
+            } else {
+                // we failed due an exception so print it as plain text
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                exception.printStackTrace(pw);
 
-            String exceptionMessage = sw.toString();
+                // the body should then be the stacktrace
+                body = ByteBuffer.wrap(sw.toString().getBytes());
+                // force content type to be text/plain as that is what the stacktrace is
+                message.setHeader(Exchange.CONTENT_TYPE, "text/plain");
+            }
 
+            // and mark the exception as failure handled, as we handled it by returning it as the response
             ExchangeHelper.setFailureHandled(message.getExchange());
-            return exceptionMessage;
         }
 
         // set the content type in the response.
@@ -285,8 +342,7 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
             httpExchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
             LOG.trace("Content-Type: {}", contentType);
         }
-
-        return message.getBody();
+        return body;
     }
 
     @Override
@@ -294,11 +350,13 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
 
         Object body = message.getBody();
 
+        final HeaderMap requestHeaders = clientRequest.getRequestHeaders();
+
         // set the content type in the response.
         String contentType = MessageHelper.getContentType(message);
         if (contentType != null) {
             // set content-type
-            clientRequest.getRequestHeaders().put(Headers.CONTENT_TYPE, contentType);
+            requestHeaders.put(Headers.CONTENT_TYPE, contentType);
             LOG.trace("Content-Type: {}", contentType);
         }
 
@@ -313,9 +371,9 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
             while (it.hasNext()) {
                 String headerValue = tc.convertTo(String.class, it.next());
                 if (headerValue != null && headerFilterStrategy != null
-                    && !headerFilterStrategy.applyFilterToCamelHeaders(key, headerValue, message.getExchange())) {
+                        && !headerFilterStrategy.applyFilterToCamelHeaders(key, headerValue, message.getExchange())) {
                     LOG.trace("HTTP-Header: {}={}", key, headerValue);
-                    clientRequest.getRequestHeaders().add(new HttpString(key), headerValue);
+                    requestHeaders.add(new HttpString(key), headerValue);
                 }
             }
         }
@@ -323,42 +381,44 @@ public class DefaultUndertowHttpBinding implements UndertowHttpBinding {
         return body;
     }
 
-    private byte[] readFromChannel(StreamSourceChannel source) throws IOException {
+    byte[] readFromChannel(StreamSourceChannel source) throws IOException {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final ByteBuffer buffer = ByteBuffer.wrap(new byte[1024]);
 
+        ReadableByteChannel blockingSource = new BlockingReadableByteChannel(source);
+
         for (;;) {
-            int res = source.read(buffer);
+            int res = blockingSource.read(buffer);
             if (res == -1) {
                 return out.toByteArray();
             } else if (res == 0) {
-                source.getReadSetter().set(new ChannelListener<StreamSourceChannel>() {
-                    @Override
-                    public void handleEvent(StreamSourceChannel channel) {
-                        for (;;) {
-                            try {
-                                int res = channel.read(buffer);
-                                if (res == -1 || res == 0) {
-                                    out.toByteArray();
-                                    return;
-                                } else {
-                                    buffer.flip();
-                                    out.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.arrayOffset() + buffer.limit());
-                                    buffer.clear();
-                                }
-                            } catch (IOException e) {
-                                LOG.error("Exception reading from channel {}", e);
-                            }
-                        }
-                    }
-                });
-                source.resumeReads();
-                return out.toByteArray();
+                LOG.error("Channel did not block");
             } else {
                 buffer.flip();
                 out.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.arrayOffset() + buffer.limit());
                 buffer.clear();
             }
+        }
+    }
+
+    class FilePartDataSource extends FileDataSource {
+        private String name;
+        private String contentType;
+
+        FilePartDataSource(FormValue value) {
+            super(value.getPath().toFile());
+            this.name = value.getFileName();
+            this.contentType = value.getHeaders().getFirst(Headers.CONTENT_TYPE);
+        }
+
+        @Override
+        public String getName() {
+            return this.name;
+        }
+
+        @Override
+        public String getContentType() {
+            return this.contentType;
         }
     }
 }

@@ -94,7 +94,9 @@ public class MongoDbTailingProcess implements Runnable {
     }
 
     private Boolean isCollectionCapped() {
-        return endpoint.getMongoDatabase().runCommand(createCollStatsCommand()).getBoolean(CAPPED_KEY);
+        // A non-capped collection does not return a "capped" key/value, so we have to deal with null here
+        Boolean result = endpoint.getMongoDatabase().runCommand(createCollStatsCommand()).getBoolean(CAPPED_KEY);
+        return result != null ? result : false;
     }
 
     private BasicDBObject createCollStatsCommand() {
@@ -151,6 +153,9 @@ public class MongoDbTailingProcess implements Runnable {
      * The heart of the tailing process.
      */
     private void doRun() {
+        int counter = 0;
+        int persistRecords = endpoint.getPersistRecords();
+        boolean persistRegularly = persistRecords > 0;
         // while the cursor has more values, keepRunning is true and the cursorId is not 0, which symbolizes that the cursor is dead
         try {
             while (cursor.hasNext() && keepRunning) { //cursor.getCursorId() != 0 &&
@@ -165,6 +170,9 @@ public class MongoDbTailingProcess implements Runnable {
                     // do nothing
                 }
                 tailTracking.setLastVal(dbObj);
+                if (persistRegularly && counter++ % persistRecords == 0) {
+                    tailTracking.persistToStore();
+                }
             }
         } catch (MongoCursorNotFoundException e) {
             // we only log the warning if we are not stopping, otherwise it is expected because the stop() method kills the cursor just in case it is blocked
@@ -187,7 +195,8 @@ public class MongoDbTailingProcess implements Runnable {
         if (lastVal == null) {
             answer = dbCol.find().cursorType(CursorType.TailableAwait).iterator();
         } else {
-            BasicDBObject queryObj = new BasicDBObject(tailTracking.getIncreasingFieldName(), new BasicDBObject("$gt", lastVal));
+            final String increasingFieldName = tailTracking.getIncreasingFieldName();
+            BasicDBObject queryObj = endpoint.getTailTrackingStrategy().createQuery(lastVal, increasingFieldName);
             answer = dbCol.find(queryObj).cursorType(CursorType.TailableAwait).iterator();
         }
         return answer;

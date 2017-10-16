@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * This will then set up a properly configured Mock endpoint, which is only valid if the received messages
  * match the number of expected messages and their message payloads are equal.
  */
-@UriEndpoint(scheme = "test", title = "Test", syntax = "test:name", producerOnly = true, label = "core,testing", lenientProperties = true)
+@UriEndpoint(firstVersion = "1.3.0", scheme = "test", title = "Test", syntax = "test:name", producerOnly = true, label = "core,testing", lenientProperties = true)
 public class TestEndpoint extends MockEndpoint {
     private static final Logger LOG = LoggerFactory.getLogger(TestEndpoint.class);
 
@@ -137,7 +137,7 @@ public class TestEndpoint extends MockEndpoint {
     }
 
     /**
-     * If enabled the the messages loaded from the test endpoint will be split using \n\r delimiters (new lines)
+     * If enabled the the messages loaded from the test endpoint will be split using new line delimiters
      * so each line is an expected message.
      * <br/>
      * For example to use a file endpoint to load a file where each line is an expected message.

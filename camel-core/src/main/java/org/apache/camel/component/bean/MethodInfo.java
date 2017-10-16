@@ -28,6 +28,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.camel.AsyncCallback;
@@ -36,17 +38,20 @@ import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
 import org.apache.camel.ExpressionEvaluationException;
+import org.apache.camel.Message;
 import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.Pattern;
 import org.apache.camel.Processor;
 import org.apache.camel.RuntimeExchangeException;
 import org.apache.camel.StreamCache;
+import org.apache.camel.impl.DefaultMessage;
 import org.apache.camel.processor.DynamicRouter;
 import org.apache.camel.processor.RecipientList;
 import org.apache.camel.processor.RoutingSlip;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.support.ExpressionAdapter;
 import org.apache.camel.util.CamelContextHelper;
+import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
 import org.apache.camel.util.StringHelper;
@@ -115,15 +120,15 @@ public class MethodInfo {
         this.hasCustomAnnotation = hasCustomAnnotation;
         this.hasHandlerAnnotation = hasHandlerAnnotation;
         this.parametersExpression = createParametersExpression();
-        
+
         Map<Class<?>, Annotation> collectedMethodAnnotation = collectMethodAnnotations(type, method);
 
         Pattern oneway = findOneWayAnnotation(method);
         if (oneway != null) {
             pattern = oneway.value();
         }
-        
-        org.apache.camel.RoutingSlip routingSlipAnnotation = 
+
+        org.apache.camel.RoutingSlip routingSlipAnnotation =
             (org.apache.camel.RoutingSlip)collectedMethodAnnotation.get(org.apache.camel.RoutingSlip.class);
         if (routingSlipAnnotation != null && matchContext(routingSlipAnnotation.context())) {
             routingSlip = new RoutingSlip(camelContext);
@@ -137,7 +142,7 @@ public class MethodInfo {
             }
         }
 
-        org.apache.camel.DynamicRouter dynamicRouterAnnotation = 
+        org.apache.camel.DynamicRouter dynamicRouterAnnotation =
             (org.apache.camel.DynamicRouter)collectedMethodAnnotation.get(org.apache.camel.DynamicRouter.class);
         if (dynamicRouterAnnotation != null
                 && matchContext(dynamicRouterAnnotation.context())) {
@@ -152,12 +157,13 @@ public class MethodInfo {
             }
         }
 
-        org.apache.camel.RecipientList recipientListAnnotation = 
+        org.apache.camel.RecipientList recipientListAnnotation =
             (org.apache.camel.RecipientList)collectedMethodAnnotation.get(org.apache.camel.RecipientList.class);
         if (recipientListAnnotation != null
                 && matchContext(recipientListAnnotation.context())) {
             recipientList = new RecipientList(camelContext, recipientListAnnotation.delimiter());
             recipientList.setStopOnException(recipientListAnnotation.stopOnException());
+            recipientList.setStopOnAggregateException(recipientListAnnotation.stopOnAggregateException());
             recipientList.setIgnoreInvalidEndpoints(recipientListAnnotation.ignoreInvalidEndpoints());
             recipientList.setParallelProcessing(recipientListAnnotation.parallelProcessing());
             recipientList.setParallelAggregate(recipientListAnnotation.parallelAggregate());
@@ -200,7 +206,7 @@ public class MethodInfo {
         collectMethodAnnotations(c, method, annotations);
         return annotations;
     }
-    
+
     private void collectMethodAnnotations(Class<?> c, Method method, Map<Class<?>, Annotation> annotations) {
         for (Class<?> i : c.getInterfaces()) {
             collectMethodAnnotations(i, method, annotations);
@@ -237,8 +243,14 @@ public class MethodInfo {
         return method.toString();
     }
 
-    public MethodInvocation createMethodInvocation(final Object pojo, final Exchange exchange) {
-        final Object[] arguments = parametersExpression.evaluate(exchange, Object[].class);
+    public MethodInvocation createMethodInvocation(final Object pojo, boolean hasParameters, final Exchange exchange) {
+        final Object[] arguments;
+        if (hasParameters) {
+            arguments = parametersExpression.evaluate(exchange, Object[].class);
+        } else {
+            arguments = null;
+        }
+
         return new MethodInvocation() {
             public Method getMethod() {
                 return method;
@@ -284,6 +296,18 @@ public class MethodInfo {
                 }
                 Object result = invoke(method, pojo, arguments, exchange);
 
+                // the method may be a closure or chained method returning a callable which should be called
+                if (result instanceof Callable) {
+                    LOG.trace("Method returned Callback which will be called: {}", result);
+                    Object callableResult = ((Callable) result).call();
+                    if (callableResult != null) {
+                        result = callableResult;
+                    } else {
+                        // if callable returned null we should not change the body
+                        result = Void.TYPE;
+                    }
+                }
+
                 if (recipientList != null) {
                     // ensure its started
                     if (!recipientList.isStarted()) {
@@ -298,19 +322,25 @@ public class MethodInfo {
                     return routingSlip.doRoutingSlip(exchange, result, callback);
                 }
 
+                //If it's Java 8 async result
+                if (CompletionStage.class.isAssignableFrom(getMethod().getReturnType())) {
+                    CompletionStage<?> completionStage = (CompletionStage<?>) result;
+
+                    completionStage
+                            .whenComplete((resultObject, e) -> {
+                                if (e != null) {
+                                    exchange.setException(e);
+                                } else if (resultObject != null) {
+                                    fillResult(exchange, resultObject);
+                                }
+                                callback.done(false);
+                            });
+                    return false;
+                }
+
                 // if the method returns something then set the value returned on the Exchange
                 if (!getMethod().getReturnType().equals(Void.TYPE) && result != Void.TYPE) {
-                    if (exchange.getPattern().isOutCapable()) {
-                        // force out creating if not already created (as its lazy)
-                        LOG.debug("Setting bean invocation result on the OUT message: {}", result);
-                        exchange.getOut().setBody(result);
-                        // propagate headers
-                        exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
-                    } else {
-                        // if not out then set it on the in
-                        LOG.debug("Setting bean invocation result on the IN message: {}", result);
-                        exchange.getIn().setBody(result);
-                    }
+                    fillResult(exchange, result);
                 }
 
                 // we did not use any of the eips, but just invoked the bean
@@ -327,6 +357,40 @@ public class MethodInfo {
                 return method;
             }
         };
+    }
+
+    private void fillResult(Exchange exchange, Object result) {
+        LOG.trace("Setting bean invocation result : {}", result);
+
+        // the bean component forces OUT if the MEP is OUT capable
+        boolean out = ExchangeHelper.isOutCapable(exchange) || exchange.hasOut();
+        Message old;
+        if (out) {
+            old = exchange.getOut();
+            // propagate headers
+            exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
+            // propagate attachments
+            if (exchange.getIn().hasAttachments()) {
+                exchange.getOut().getAttachments().putAll(exchange.getIn().getAttachments());
+            }
+        } else {
+            old = exchange.getIn();
+        }
+
+        // create a new message container so we do not drag specialized message objects along
+        // but that is only needed if the old message is a specialized message
+        boolean copyNeeded = !(old.getClass().equals(DefaultMessage.class));
+
+        if (copyNeeded) {
+            Message msg = new DefaultMessage(exchange.getContext());
+            msg.copyFromWithNewBody(old, result);
+
+            // replace message on exchange
+            ExchangeHelper.replaceMessage(exchange, msg, false);
+        } else {
+            // no copy needed so set replace value directly
+            old.setBody(result);
+        }
     }
 
     public Class<?> getType() {
@@ -396,16 +460,16 @@ public class MethodInfo {
     public boolean isStaticMethod() {
         return Modifier.isStatic(method.getModifiers());
     }
-    
+
     /**
      * Returns true if this method is covariant with the specified method
      * (this method may above or below the specified method in the class hierarchy)
      */
     public boolean isCovariantWith(MethodInfo method) {
-        return 
+        return
             method.getMethod().getName().equals(this.getMethod().getName())
             && (method.getMethod().getReturnType().isAssignableFrom(this.getMethod().getReturnType())
-            || this.getMethod().getReturnType().isAssignableFrom(method.getMethod().getReturnType())) 
+            || this.getMethod().getReturnType().isAssignableFrom(method.getMethod().getReturnType()))
             && Arrays.deepEquals(method.getMethod().getParameterTypes(), this.getMethod().getParameterTypes());
     }
 
@@ -574,22 +638,19 @@ public class MethodInfo {
         @SuppressWarnings("unchecked")
         public <T> T evaluate(Exchange exchange, Class<T> type) {
             Object body = exchange.getIn().getBody();
-            boolean multiParameterArray = false;
-            if (exchange.getIn().getHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY) != null) {
-                multiParameterArray = exchange.getIn().getHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY, Boolean.class);
-                if (multiParameterArray) {
-                    // Just change the message body to an Object array
-                    if (!(body instanceof Object[])) {
-                        body = exchange.getIn().getBody(Object[].class);
-                    }
+            boolean multiParameterArray = exchange.getIn().getHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY, false, boolean.class);
+            if (multiParameterArray) {
+                // Just change the message body to an Object array
+                if (!(body instanceof Object[])) {
+                    body = exchange.getIn().getBody(Object[].class);
                 }
             }
 
             // if there was an explicit method name to invoke, then we should support using
             // any provided parameter values in the method name
-            String methodName = exchange.getIn().getHeader(Exchange.BEAN_METHOD_NAME, "", String.class);
+            String methodName = exchange.getIn().getHeader(Exchange.BEAN_METHOD_NAME, String.class);
             // the parameter values is between the parenthesis
-            String methodParameters = ObjectHelper.betweenOuterPair(methodName, '(', ')');
+            String methodParameters = StringHelper.betweenOuterPair(methodName, '(', ')');
             // use an iterator to walk the parameter values
             Iterator<?> it = null;
             if (methodParameters != null) {
@@ -603,8 +664,12 @@ public class MethodInfo {
             // we need to do this before the expressions gets evaluated as it may contain
             // a @Bean expression which would by mistake read these headers. So the headers
             // must be removed at this point of time
-            exchange.getIn().removeHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY);
-            exchange.getIn().removeHeader(Exchange.BEAN_METHOD_NAME);
+            if (multiParameterArray) {
+                exchange.getIn().removeHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY);
+            }
+            if (methodName != null) {
+                exchange.getIn().removeHeader(Exchange.BEAN_METHOD_NAME);
+            }
 
             Object[] answer = evaluateParameterExpressions(exchange, body, multiParameterArray, it);
             return (T) answer;

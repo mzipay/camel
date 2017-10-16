@@ -16,7 +16,6 @@
  */
 package org.apache.camel.itest.springboot;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.TreeSet;
@@ -90,7 +89,7 @@ public class ITestConfigBuilder {
 
     public ITestConfigBuilder resource(String file, String dest) {
         if (config.getResources() == null) {
-            config.setResources(new HashMap<String, String>());
+            config.setResources(new HashMap<>());
         }
         config.getResources().put(file, dest);
         return this;
@@ -98,7 +97,7 @@ public class ITestConfigBuilder {
 
     public ITestConfigBuilder dependency(String dependencyCanonicalForm) {
         if (config.getAdditionalDependencies() == null) {
-            config.setAdditionalDependencies(new HashSet<String>());
+            config.setAdditionalDependencies(new HashSet<>());
         }
         config.getAdditionalDependencies().add(dependencyCanonicalForm);
         return this;
@@ -140,6 +139,37 @@ public class ITestConfigBuilder {
         return this;
     }
 
+    public ITestConfigBuilder ignoreLibraryMismatch(String libraryPrefix) {
+        if (config.getIgnoreLibraryMismatch() == null) {
+            config.setIgnoreLibraryMismatch(new HashSet<String>());
+        }
+        config.getIgnoreLibraryMismatch().add(libraryPrefix);
+        return this;
+    }
+
+    public ITestConfigBuilder testLibraryVersion(String groupIdArtifactId, String version) {
+        if (config.getTestLibraryVersions() == null) {
+            config.setTestLibraryVersions(new HashMap<>());
+        }
+        config.getTestLibraryVersions().put(groupIdArtifactId, version);
+        return this;
+    }
+
+    public ITestConfigBuilder includeTestDependencies(Boolean includeTestDependencies) {
+        config.setIncludeTestDependencies(includeTestDependencies);
+        return this;
+    }
+
+    public ITestConfigBuilder unitTestsEnabled(Boolean unitTestsEnabled) {
+        config.setUnitTestEnabled(unitTestsEnabled);
+        return this;
+    }
+
+    public ITestConfigBuilder springBootVersion(String springBootVersion) {
+        config.setSpringBootVersion(springBootVersion);
+        return this;
+    }
+
     public ITestConfig build() {
 
         // Checking conditions
@@ -177,7 +207,7 @@ public class ITestConfigBuilder {
         }
 
         if (config.getIncludeProvidedDependencies() == null) {
-            config.setIncludeProvidedDependencies(booleanPropertyOr("includeProvidedDependencies", true));
+            config.setIncludeProvidedDependencies(booleanPropertyOr("includeProvidedDependencies", false));
         }
 
         if (config.getModulesPath() == null) {
@@ -197,27 +227,39 @@ public class ITestConfigBuilder {
         }
 
         if (config.getResources() == null) {
-            config.setResources(Collections.<String, String>emptyMap());
+            config.setResources(new HashMap<>());
         }
 
         if (config.getAdditionalDependencies() == null) {
-            config.setAdditionalDependencies(Collections.<String>emptySet());
+            config.setAdditionalDependencies(new HashSet<>());
         }
 
         if (config.getMavenExclusions() == null) {
-            config.setMavenExclusions(Collections.<String>emptySet());
+            config.setMavenExclusions(new HashSet<>());
         }
 
         if (config.getJmxDisabledNames() == null) {
-            config.setJmxDisabledNames(Collections.<String>emptySet());
+            config.setJmxDisabledNames(new HashSet<>());
         }
 
         if (config.getSystemProperties() == null) {
-            config.setSystemProperties(Collections.<String, String>emptyMap());
+            config.setSystemProperties(new HashMap<>());
         }
 
         if (config.getUseCustomLog() == null) {
             config.setUseCustomLog(booleanPropertyOr("useCustomLog", true));
+        }
+
+        if (config.getIgnoreLibraryMismatch() == null) {
+            config.setIgnoreLibraryMismatch(new HashSet<>());
+        }
+
+        if (config.getTestLibraryVersions() == null) {
+            config.setTestLibraryVersions(new HashMap<>());
+        }
+
+        if (config.getSpringBootVersion() == null) {
+            config.setSpringBootVersion(propertyOr("springBootVersion", null));
         }
 
         return config;
@@ -240,6 +282,16 @@ public class ITestConfigBuilder {
         Boolean res = defaultVal;
         if (prop != null) {
             res = Boolean.valueOf(prop);
+        }
+
+        return res;
+    }
+
+    private Integer integerPropertyOr(String name, Integer defaultVal) {
+        String prop = propertyOr(name, null);
+        Integer res = defaultVal;
+        if (prop != null) {
+            res = Integer.valueOf(prop);
         }
 
         return res;

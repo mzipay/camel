@@ -27,11 +27,11 @@ import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Castor data format
+ * Castor data format is used for unmarshal a XML payload to POJO or to marshal POJO back to XML payload.
  *
  * @version 
  */
-@Metadata(label = "dataformat,transformation,xml", title = "Castor")
+@Metadata(firstVersion = "2.1.0", label = "dataformat,transformation,xml", title = "Castor")
 @XmlRootElement(name = "castor")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class CastorDataFormat extends DataFormatDefinition {

@@ -18,19 +18,15 @@ package org.apache.camel.component.salesforce.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.camel.component.salesforce.internal.client.JsonUtils;
+import org.apache.camel.component.salesforce.api.utils.JsonUtils;
 import org.apache.camel.component.salesforce.internal.dto.LoginToken;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 public class LoginTokenTest {
-
-    private static final Logger LOG = LoggerFactory.getLogger(SessionIntegrationTest.class);
 
     @Test
     public void testLoginTokenWithUnknownFields() throws Exception {

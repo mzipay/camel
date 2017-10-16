@@ -17,11 +17,16 @@
 package org.apache.camel.builder;
 
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
+import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
+import org.apache.camel.Message;
 import org.apache.camel.builder.xml.Namespaces;
 import org.apache.camel.model.ExpressionNode;
 import org.apache.camel.model.language.ExpressionDefinition;
+import org.apache.camel.support.ExpressionAdapter;
 
 /**
  * Represents an expression clause within the DSL which when the expression is
@@ -67,6 +72,31 @@ public class ExpressionClause<T> extends ExpressionDefinition {
     }
 
     /**
+     * A functional expression of the exchange
+     */
+    public T exchange(final Function<Exchange, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange);
+            }
+        });
+    }
+
+    /**
+     * An expression of an inbound message
+     */
+    public T message() {
+        return inMessage();
+    }
+
+    /**
+     * A functional expression of an inbound message
+     */
+    public T message(final Function<Message, Object> function) {
+        return inMessage(function);
+    }
+
+    /**
      * An expression of an inbound message
      */
     public T inMessage() {
@@ -74,10 +104,32 @@ public class ExpressionClause<T> extends ExpressionDefinition {
     }
 
     /**
-     * An expression of an inbound message
+     * A functional expression of an inbound message
+     */
+    public T inMessage(final Function<Message, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getIn());
+            }
+        });
+    }
+
+    /**
+     * An expression of an outbound message
      */
     public T outMessage() {
         return delegate.outMessage();
+    }
+
+    /**
+     * A functional expression of an outbound message
+     */
+    public T outMessage(final Function<Message, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getOut());
+            }
+        });
     }
 
     /**
@@ -88,10 +140,58 @@ public class ExpressionClause<T> extends ExpressionDefinition {
     }
 
     /**
+     * A functional expression of an inbound message body
+     */
+    public T body(final Function<Object, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getIn().getBody());
+            }
+        });
+    }
+
+    /**
+     * A functional expression of an inbound message body and headers
+     */
+    public T body(final BiFunction<Object, Map<String, Object>, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(
+                    exchange.getIn().getBody(),
+                    exchange.getIn().getHeaders());
+            }
+        });
+    }
+
+    /**
      * An expression of an inbound message body converted to the expected type
      */
     public T body(Class<?> expectedType) {
         return delegate.body(expectedType);
+    }
+
+    /**
+     * A functional expression of an inbound message body converted to the expected type
+     */
+    public <B> T body(Class<B> expectedType, final Function<B, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getIn().getBody(expectedType));
+            }
+        });
+    }
+
+    /**
+     * A functional expression of an inbound message body converted to the expected type and headers
+     */
+    public <B> T body(Class<B> expectedType, final BiFunction<B, Map<String, Object>, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(
+                    exchange.getIn().getBody(expectedType),
+                    exchange.getIn().getHeaders());
+            }
+        });
     }
 
     /**
@@ -102,10 +202,58 @@ public class ExpressionClause<T> extends ExpressionDefinition {
     }
 
     /**
+     * A functional expression of an outbound message body
+     */
+    public T outBody(final Function<Object, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getOut().getBody());
+            }
+        });
+    }
+
+    /**
+     * A functional expression of an outbound message body and headers
+     */
+    public T outBody(final BiFunction<Object, Map<String, Object>, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(
+                    exchange.getOut().getBody(),
+                    exchange.getOut().getHeaders());
+            }
+        });
+    }
+
+    /**
      * An expression of an outbound message body converted to the expected type
      */
     public T outBody(Class<?> expectedType) {
         return delegate.outBody(expectedType);
+    }
+
+    /**
+     * A functional expression of an outbound message body converted to the expected type
+     */
+    public <B> T outBody(Class<B> expectedType, final Function<B, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(exchange.getOut().getBody(expectedType));
+            }
+        });
+    }
+
+    /**
+     * A functional expression of an outbound message body converted to the expected type and headers
+     */
+    public <B> T outBody(Class<B> expectedType, final BiFunction<B, Map<String, Object>, Object> function) {
+        return delegate.expression(new ExpressionAdapter() {
+            public Object evaluate(Exchange exchange) {
+                return function.apply(
+                    exchange.getOut().getBody(expectedType),
+                    exchange.getOut().getHeaders());
+            }
+        });
     }
 
     /**
@@ -162,9 +310,19 @@ public class ExpressionClause<T> extends ExpressionDefinition {
 
     /**
      * An expression of the exchange properties
+     *
+     * @deprecated use {@link #exchangeProperties()} instead
      */
+    @Deprecated
     public T properties() {
-        return delegate.properties();
+        return exchangeProperties();
+    }
+
+    /**
+     * An expression of the exchange properties
+     */
+    public T exchangeProperties() {
+        return delegate.exchangeProperties();
     }
 
     // Languages
@@ -336,6 +494,60 @@ public class ExpressionClause<T> extends ExpressionDefinition {
      */
     public T jsonpath(String text, boolean suppressExceptions, Class<?> resultType) {
         return delegate.jsonpath(text, suppressExceptions, resultType);
+    }
+
+    /**
+     * Evaluates a <a
+     * href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param resultType the return type expected by the expression
+     * @param headerName the name of the header to apply the expression to
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, Class<?> resultType, String headerName) {
+        return delegate.jsonpath(text, suppressExceptions, true, resultType, headerName);
+    }
+
+    /**
+     * Evaluates a <a
+     * href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text) {
+        return delegate.jsonpathWriteAsString(text);
+    }
+
+    /**
+     * Evaluates a <a
+     * href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text, boolean suppressExceptions) {
+        return delegate.jsonpathWriteAsString(text, suppressExceptions);
+    }
+
+    /**
+     * Evaluates a <a
+     * href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param headerName the name of the header to apply the expression to
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text, boolean suppressExceptions, String headerName) {
+        return delegate.jsonpathWriteAsString(text, suppressExceptions, true, headerName);
     }
 
     /**
@@ -521,10 +733,35 @@ public class ExpressionClause<T> extends ExpressionDefinition {
      * @param token the token
      * @param regex whether the token is a regular expression or not
      * @param group to group by the given number
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, boolean regex, String group) {
+        return tokenize(token, regex, group, false);
+    }
+
+    /**
+     * Evaluates a token expression on the message body
+     *
+     * @param token the token
+     * @param regex whether the token is a regular expression or not
+     * @param group to group by the given number
      * @param skipFirst whether to skip the first element
      * @return the builder to continue processing the DSL
      */
     public T tokenize(String token, boolean regex, int group, boolean skipFirst) {
+        return delegate.tokenize(token, null, regex, group, skipFirst);
+    }
+
+    /**
+     * Evaluates a token expression on the message body
+     *
+     * @param token the token
+     * @param regex whether the token is a regular expression or not
+     * @param group to group by the given number
+     * @param skipFirst whether to skip the first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, boolean regex, String group, boolean skipFirst) {
         return delegate.tokenize(token, null, regex, group, skipFirst);
     }
 

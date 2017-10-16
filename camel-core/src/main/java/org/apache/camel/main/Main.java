@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.ProducerTemplate;
+import org.apache.camel.component.properties.PropertiesComponent;
 import org.apache.camel.impl.CompositeRegistry;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
@@ -115,7 +116,17 @@ public class Main extends MainSupport {
             throw new IllegalStateException("Error creating CamelContext");
         }
     }
-    
+
+    /**
+     * A list of locations to load properties. You can use comma to separate multiple locations.
+     * This option will override any default locations and only use the locations from this option.
+     */
+    public void setPropertyPlaceholderLocations(String location) {
+        PropertiesComponent pc = new PropertiesComponent();
+        pc.setLocation(location);
+        bind("properties", pc);
+    }
+
     // Implementation methods
     // -------------------------------------------------------------------------
 

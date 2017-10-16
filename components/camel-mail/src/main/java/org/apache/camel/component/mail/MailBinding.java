@@ -22,10 +22,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
 import javax.mail.Address;
@@ -40,6 +41,7 @@ import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
+import javax.mail.internet.MimeUtility;
 import javax.mail.util.ByteArrayDataSource;
 
 import org.apache.camel.Attachment;
@@ -593,15 +595,45 @@ public class MailBinding {
         return true;
     }
 
-    protected Map<String, Object> extractHeadersFromMail(Message mailMessage, Exchange exchange) throws MessagingException {
-        Map<String, Object> answer = new HashMap<String, Object>();
+    protected Map<String, Object> extractHeadersFromMail(Message mailMessage, Exchange exchange) throws MessagingException, IOException {
+        Map<String, Object> answer = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
         Enumeration<?> names = mailMessage.getAllHeaders();
 
+        MailConfiguration mailConfiguration = ((MailEndpoint) exchange.getFromEndpoint()).getConfiguration();
         while (names.hasMoreElements()) {
             Header header = (Header) names.nextElement();
+
             String value = header.getValue();
+            if (value != null && mailConfiguration.isMimeDecodeHeaders()) {
+                value = MimeUtility.decodeText(MimeUtility.unfold(value));
+            }
+
             if (headerFilterStrategy != null && !headerFilterStrategy.applyFilterToExternalHeaders(header.getName(), value, exchange)) {
                 CollectionHelper.appendValue(answer, header.getName(), value);
+            }
+        }
+        // if the message is a multipart message, do not set the content type to multipart/*
+        if (mailConfiguration.isMapMailMessage()) {
+            Object content = mailMessage.getContent();
+            if (content instanceof MimeMultipart) {
+                MimeMultipart multipart = (MimeMultipart)content;
+                int size = multipart.getCount();
+                for (int i = 0; i < size; i++) {
+                    BodyPart part = multipart.getBodyPart(i);
+                    content = part.getContent();
+                    // in case of nested multiparts iterate into them
+                    while (content instanceof MimeMultipart) {
+                        if (multipart.getCount() < 1) {
+                            break;
+                        }
+                        part = ((MimeMultipart)content).getBodyPart(0);
+                        content = part.getContent();
+                    }
+                    if (part.getContentType().toLowerCase().startsWith("text")) {
+                        answer.put(Exchange.CONTENT_TYPE, part.getContentType());
+                        break;
+                    }
+                }
             }
         }
 

@@ -19,16 +19,23 @@ package org.apache.camel.maven.packaging.model;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.camel.maven.packaging.StringHelper.cutLastZeroDigit;
+
 public class ComponentModel {
+
+    private final boolean coreOnly;
 
     private String kind;
     private String scheme;
     private String syntax;
     private String alternativeSyntax;
+    private String alternativeSchemes;
     private String title;
     private String description;
+    private String firstVersion;
     private String label;
     private String deprecated;
+    private String deprecationNote;
     private String consumerOnly;
     private String producerOnly;
     private String javaType;
@@ -36,7 +43,12 @@ public class ComponentModel {
     private String artifactId;
     private String version;
     private final List<ComponentOptionModel> componentOptions = new ArrayList<ComponentOptionModel>();
+    private final List<EndpointOptionModel> endpointPathOptions = new ArrayList<EndpointOptionModel>();
     private final List<EndpointOptionModel> endpointOptions = new ArrayList<EndpointOptionModel>();
+
+    public ComponentModel(boolean coreOnly) {
+        this.coreOnly = coreOnly;
+    }
 
     public String getKind() {
         return kind;
@@ -70,6 +82,14 @@ public class ComponentModel {
         this.alternativeSyntax = alternativeSyntax;
     }
 
+    public String getAlternativeSchemes() {
+        return alternativeSchemes;
+    }
+
+    public void setAlternativeSchemes(String alternativeSchemes) {
+        this.alternativeSchemes = alternativeSchemes;
+    }
+
     public String getTitle() {
         return title;
     }
@@ -86,6 +106,14 @@ public class ComponentModel {
         this.description = description;
     }
 
+    public String getFirstVersion() {
+        return firstVersion;
+    }
+
+    public void setFirstVersion(String firstVersion) {
+        this.firstVersion = firstVersion;
+    }
+
     public String getLabel() {
         return label;
     }
@@ -100,6 +128,14 @@ public class ComponentModel {
 
     public void setDeprecated(String deprecated) {
         this.deprecated = deprecated;
+    }
+
+    public String getDeprecationNote() {
+        return deprecationNote;
+    }
+
+    public void setDeprecationNote(String deprecationNote) {
+        this.deprecationNote = deprecationNote;
     }
 
     public String getConsumerOnly() {
@@ -162,8 +198,16 @@ public class ComponentModel {
         return endpointOptions;
     }
 
+    public List<EndpointOptionModel> getEndpointPathOptions() {
+        return endpointPathOptions;
+    }
+
     public void addEndpointOption(EndpointOptionModel option) {
         endpointOptions.add(option);
+    }
+
+    public void addEndpointPathOption(EndpointOptionModel option) {
+        endpointPathOptions.add(option);
     }
 
     public String getShortJavaType() {
@@ -180,5 +224,32 @@ public class ComponentModel {
         } else {
             return javaType;
         }
+    }
+
+    public String getDocLink() {
+        // special for these components
+        if ("camel-box".equals(artifactId)) {
+            return "camel-box/camel-box-component/src/main/docs";
+        } else if ("camel-linkedin".equals(artifactId)) {
+            return "camel-linkedin/camel-linkedin-component/src/main/docs";
+        } else if ("camel-olingo2".equals(artifactId)) {
+            return "camel-olingo2/camel-olingo2-component/src/main/docs";
+        } else if ("camel-olingo4".equals(artifactId)) {
+            return "camel-olingo4/camel-olingo4-component/src/main/docs";
+        } else if ("camel-salesforce".equals(artifactId)) {
+            return "camel-salesforce/camel-salesforce-component/src/main/docs";
+        } else if ("camel-servicenow".equals(artifactId)) {
+            return "camel-servicenow/camel-servicenow-component/src/main/docs";
+        }
+
+        if ("camel-core".equals(artifactId)) {
+            return coreOnly ? "src/main/docs" : "../camel-core/src/main/docs";
+        } else {
+            return artifactId + "/src/main/docs";
+        }
+    }
+
+    public String getFirstVersionShort() {
+        return cutLastZeroDigit(firstVersion);
     }
 }

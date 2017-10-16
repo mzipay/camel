@@ -26,8 +26,10 @@ import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+
 import javax.xml.XMLConstants;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
@@ -61,8 +63,10 @@ import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ResourceHelper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * A <a href="http://camel.apache.org/data-format.html">data format</a> ({@link DataFormat})
@@ -101,6 +105,8 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
     private JaxbXmlStreamWriterWrapper xmlStreamWriterWrapper;
     private TypeConverter typeConverter;
     private Schema cachedSchema;
+    private Map<String, Object> jaxbProviderProperties;
+    private boolean contentTypeHeader = true;
 
     public JaxbDataFormat() {
     }
@@ -146,9 +152,28 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
             if (namespacePrefixMapper != null) {
                 marshaller.setProperty(namespacePrefixMapper.getRegistrationKey(), namespacePrefixMapper);
             }
-
+            // Inject any JAX-RI custom properties from the exchange or from the instance into the marshaller
+            Map<String, Object> customProperties = exchange.getProperty(JaxbConstants.JAXB_PROVIDER_PROPERTIES, Map.class);
+            if (customProperties == null) {
+                customProperties = getJaxbProviderProperties();
+            }
+            if (customProperties != null) {
+                for (Entry<String, Object> property : customProperties.entrySet()) {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Using JAXB Provider Property {}={}", property.getKey(), property.getValue());
+                    }
+                    marshaller.setProperty(property.getKey(), property.getValue());
+                }
+            }
             marshal(exchange, graph, stream, marshaller);
 
+            if (contentTypeHeader) {
+                if (exchange.hasOut()) {
+                    exchange.getOut().setHeader(Exchange.CONTENT_TYPE, "application/xml");
+                } else {
+                    exchange.getIn().setHeader(Exchange.CONTENT_TYPE, "application/xml");
+                }
+            }
         } catch (Exception e) {
             throw new IOException(e);
         }
@@ -158,8 +183,22 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
         throws XMLStreamException, JAXBException, NoTypeConversionAvailableException, IOException, InvalidPayloadException {
 
         Object element = graph;
-        if (partialClass != null && getPartNamespace() != null) {
-            element = new JAXBElement<Object>(getPartNamespace(), partialClass, graph);
+        QName partNamespaceOnDataFormat = getPartNamespace();
+        String partClassFromHeader = exchange.getIn().getHeader(JaxbConstants.JAXB_PART_CLASS, String.class);
+        String partNamespaceFromHeader = exchange.getIn().getHeader(JaxbConstants.JAXB_PART_NAMESPACE, String.class);
+        if ((partialClass != null || partClassFromHeader != null)
+                && (partNamespaceOnDataFormat != null || partNamespaceFromHeader != null)) {
+            if (partClassFromHeader != null) {
+                try {
+                    partialClass = camelContext.getClassResolver().resolveMandatoryClass(partClassFromHeader, Object.class);
+                } catch (ClassNotFoundException e) {
+                    throw new JAXBException(e);
+                }
+            }
+            if (partNamespaceFromHeader != null) {
+                partNamespaceOnDataFormat = QName.valueOf(partNamespaceFromHeader);
+            }
+            element = new JAXBElement<Object>(partNamespaceOnDataFormat, partialClass, graph);
         }
 
         // only marshal if its possible
@@ -231,8 +270,16 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
             } else {
                 xmlReader = typeConverter.convertTo(XMLStreamReader.class, stream);
             }
-            if (partialClass != null) {
+            String partClassFromHeader = (String)exchange.getIn().getHeader(JaxbConstants.JAXB_PART_CLASS);
+            if (partialClass != null || partClassFromHeader != null) {
                 // partial unmarshalling
+                if (partClassFromHeader != null) {
+                    try {
+                        partialClass = camelContext.getClassResolver().resolveMandatoryClass(partClassFromHeader, Object.class);
+                    } catch (ClassNotFoundException e) {
+                        throw new JAXBException(e);
+                    }
+                }
                 answer = createUnmarshaller().unmarshal(xmlReader, partialClass);
             } else {
                 answer = createUnmarshaller().unmarshal(xmlReader);
@@ -413,6 +460,26 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
         this.noNamespaceSchemaLocation = schemaLocation;
     }
 
+    public Map<String, Object> getJaxbProviderProperties() {
+        return jaxbProviderProperties;
+    }
+
+    public void setJaxbProviderProperties(Map<String, Object> jaxbProviderProperties) {
+        this.jaxbProviderProperties = jaxbProviderProperties;
+    }
+
+
+    public boolean isContentTypeHeader() {
+        return contentTypeHeader;
+    }
+
+    /**
+     * If enabled then JAXB will set the Content-Type header to <tt>application/xml</tt> when marshalling.
+     */
+    public void setContentTypeHeader(boolean contentTypeHeader) {
+        this.contentTypeHeader = contentTypeHeader;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     protected void doStart() throws Exception {
@@ -536,4 +603,5 @@ public class JaxbDataFormat extends ServiceSupport implements DataFormat, DataFo
             SCHEMA_FACTORY_POOL.offer(factory);
         }
     }
+
 }

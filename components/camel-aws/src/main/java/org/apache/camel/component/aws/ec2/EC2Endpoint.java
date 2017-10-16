@@ -18,8 +18,13 @@ package org.apache.camel.component.aws.ec2;
 
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
+import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
@@ -33,7 +38,7 @@ import org.apache.camel.util.ObjectHelper;
 /**
  * The aws-ec2 is used for managing Amazon EC2 instances.
  */
-@UriEndpoint(scheme = "aws-ec2", title = "AWS EC2", syntax = "aws-ec2:label", producerOnly = true, label = "cloud,management")
+@UriEndpoint(firstVersion = "2.16.0", scheme = "aws-ec2", title = "AWS EC2", syntax = "aws-ec2:label", producerOnly = true, label = "cloud,management")
 public class EC2Endpoint extends ScheduledPollEndpoint {
     
     private AmazonEC2Client ec2Client;
@@ -62,7 +67,7 @@ public class EC2Endpoint extends ScheduledPollEndpoint {
     public void doStart() throws Exception {
         super.doStart();
         
-        ec2Client = configuration.getAmazonEc2Client() != null ? configuration.getAmazonEc2Client() : createEc2Client();
+        ec2Client = configuration.getAmazonEc2Client() != null ? configuration.getAmazonEc2Client() : (AmazonEC2Client) createEc2Client();
         if (ObjectHelper.isNotEmpty(configuration.getAmazonEc2Endpoint())) {
             ec2Client.setEndpoint(configuration.getAmazonEc2Endpoint());
         }
@@ -76,17 +81,37 @@ public class EC2Endpoint extends ScheduledPollEndpoint {
         return ec2Client;
     }
 
-    AmazonEC2Client createEc2Client() {
-        AmazonEC2Client client = null;
-        AWSCredentials credentials = new BasicAWSCredentials(configuration.getAccessKey(), configuration.getSecretKey());
+    AmazonEC2 createEc2Client() {
+        AmazonEC2 client = null;
+        ClientConfiguration clientConfiguration = null;
+        AmazonEC2ClientBuilder clientBuilder = null;
+        boolean isClientConfigFound = false;
         if (ObjectHelper.isNotEmpty(configuration.getProxyHost()) && ObjectHelper.isNotEmpty(configuration.getProxyPort())) {
-            ClientConfiguration clientConfiguration = new ClientConfiguration();
+            clientConfiguration = new ClientConfiguration();
             clientConfiguration.setProxyHost(configuration.getProxyHost());
             clientConfiguration.setProxyPort(configuration.getProxyPort());
-            client = new AmazonEC2Client(credentials, clientConfiguration);
-        } else {
-            client = new AmazonEC2Client(credentials);
+            isClientConfigFound = true;
         }
+        if (configuration.getAccessKey() != null && configuration.getSecretKey() != null) {
+            AWSCredentials credentials = new BasicAWSCredentials(configuration.getAccessKey(), configuration.getSecretKey());
+            AWSCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(credentials);
+            if (isClientConfigFound) {
+                clientBuilder = AmazonEC2ClientBuilder.standard().withClientConfiguration(clientConfiguration).withCredentials(credentialsProvider);
+            } else {
+                clientBuilder = AmazonEC2ClientBuilder.standard().withCredentials(credentialsProvider);
+            }
+        } else {
+            if (isClientConfigFound) {
+                clientBuilder = AmazonEC2ClientBuilder.standard();
+            } else {
+                clientBuilder = AmazonEC2ClientBuilder.standard().withClientConfiguration(clientConfiguration);
+            }
+        }
+        if (ObjectHelper.isNotEmpty(configuration.getAmazonEc2Endpoint()) && ObjectHelper.isNotEmpty(configuration.getRegion())) {
+            EndpointConfiguration endpointConfiguration = new EndpointConfiguration(configuration.getAmazonEc2Endpoint(), configuration.getRegion());
+            clientBuilder = clientBuilder.withEndpointConfiguration(endpointConfiguration);
+        }
+        client = clientBuilder.build();
         return client;
     }
 }

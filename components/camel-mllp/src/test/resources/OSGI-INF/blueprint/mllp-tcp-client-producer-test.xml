@@ -8,7 +8,7 @@
     (the "License"); you may not use this file except in compliance with
     the License.  You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+         http://www.apache.org/licenses/LICENSE-2.0
 
     Unless required by applicable law or agreed to in writing, software
     distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,7 +61,7 @@
         </onException>
 
         <onException>
-            <exception>org.apache.camel.component.mllp.MllpCorruptFrameException</exception>
+            <exception>org.apache.camel.component.mllp.MllpFrameException</exception>
             <redeliveryPolicy logHandled="true"/>
             <handled>
                 <constant>true</constant>

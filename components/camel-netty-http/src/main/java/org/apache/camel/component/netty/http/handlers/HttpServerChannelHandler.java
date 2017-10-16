@@ -108,9 +108,10 @@ public class HttpServerChannelHandler extends ServerChannelHandler {
             HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
             response.setChunked(false);
             response.headers().set("Allow", s);
-            response.headers().set(Exchange.CONTENT_TYPE, "text/plain");
+            // do not include content-type as that would indicate to the caller that we can only do text/plain
             response.headers().set(Exchange.CONTENT_LENGTH, 0);
-            messageEvent.getChannel().write(response);
+            messageEvent.getChannel().write(response).syncUninterruptibly();
+            messageEvent.getChannel().close();
             return;
         }
         if (consumer.getEndpoint().getHttpMethodRestrict() != null

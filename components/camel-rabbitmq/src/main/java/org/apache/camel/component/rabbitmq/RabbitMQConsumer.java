@@ -71,12 +71,16 @@ public class RabbitMQConsumer extends DefaultConsumer implements Suspendable {
      * @throws TimeoutException
      */
     protected synchronized Connection getConnection() throws IOException, TimeoutException {
-        if (this.conn != null && this.conn.isOpen()) {
+        if (this.conn == null) {
+            openConnection();
+            return this.conn;
+        } else if (!this.conn.isOpen() && this.endpoint.getAutomaticRecoveryEnabled()) {
+            return this.conn;
+        } else {
+            log.debug("The existing connection is closed");
+            openConnection();
             return this.conn;
         }
-        log.debug("The existing connection is closed");
-        openConnection();
-        return this.conn;
     }
 
 
@@ -131,8 +135,7 @@ public class RabbitMQConsumer extends DefaultConsumer implements Suspendable {
             try {
                 consumer.stop();
             } catch (TimeoutException e) {
-                log.error("Timeout occured");
-                throw e;
+                log.warn("Timeout occurred while stopping consumer. This exception is ignored", e);
             }
         }
         this.consumers.clear();

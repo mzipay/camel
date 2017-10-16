@@ -18,8 +18,12 @@ package org.apache.camel.component.aws.swf;
 
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.simpleworkflow.AmazonSimpleWorkflow;
 import com.amazonaws.services.simpleworkflow.AmazonSimpleWorkflowClient;
+import com.amazonaws.services.simpleworkflow.AmazonSimpleWorkflowClientBuilder;
 import com.amazonaws.services.simpleworkflow.flow.StartWorkflowOptions;
 import org.apache.camel.Consumer;
 import org.apache.camel.Exchange;
@@ -35,7 +39,8 @@ import org.apache.camel.util.ExchangeHelper;
 /**
  * The aws-swf component is used for managing workflows from Amazon Simple Workflow.
  */
-@UriEndpoint(scheme = "aws-swf", title = "AWS Simple Workflow", syntax = "aws-swf:type", consumerClass = SWFWorkflowConsumer.class, label = "cloud,workflow")
+@UriEndpoint(firstVersion = "2.13.0", scheme = "aws-swf", title = "AWS Simple Workflow", syntax = "aws-swf:type",
+    consumerClass = SWFWorkflowConsumer.class, label = "cloud,workflow")
 public class SWFEndpoint extends DefaultEndpoint {
 
     private AmazonSimpleWorkflowClient amazonSWClient;
@@ -70,7 +75,7 @@ public class SWFEndpoint extends DefaultEndpoint {
     @Override
     protected void doStart() throws Exception {
         if (configuration.getAmazonSWClient() == null) {
-            amazonSWClient = createSWClient();
+            amazonSWClient = (AmazonSimpleWorkflowClient) createSWClient();
         }
         super.doStart();
     }
@@ -88,15 +93,16 @@ public class SWFEndpoint extends DefaultEndpoint {
         return configuration.getAmazonSWClient() != null ? configuration.getAmazonSWClient() : amazonSWClient;
     }
 
-    private AmazonSimpleWorkflowClient createSWClient() throws Exception {
+    private AmazonSimpleWorkflow createSWClient() throws Exception {
         AWSCredentials credentials = new BasicAWSCredentials(configuration.getAccessKey(), configuration.getSecretKey());
+        AWSCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(credentials);
 
         ClientConfiguration clientConfiguration = new ClientConfiguration();
         if (!configuration.getClientConfigurationParameters().isEmpty()) {
             setProperties(clientConfiguration, configuration.getClientConfigurationParameters());
         }
 
-        AmazonSimpleWorkflowClient client = new AmazonSimpleWorkflowClient(credentials, clientConfiguration);
+        AmazonSimpleWorkflow client = AmazonSimpleWorkflowClientBuilder.standard().withClientConfiguration(clientConfiguration).withCredentials(credentialsProvider).build();
         if (!configuration.getSWClientParameters().isEmpty()) {
             setProperties(client, configuration.getSWClientParameters());
         }

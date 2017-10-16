@@ -16,15 +16,25 @@
  */
 package org.apache.camel.component.kafka;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.spi.Metadata;
+import org.apache.camel.spi.StateRepository;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 import org.apache.camel.spi.UriPath;
+import org.apache.camel.util.jsse.CipherSuitesParameters;
+import org.apache.camel.util.jsse.KeyManagersParameters;
+import org.apache.camel.util.jsse.KeyStoreParameters;
+import org.apache.camel.util.jsse.SSLContextParameters;
+import org.apache.camel.util.jsse.SecureSocketProtocolsParameters;
+import org.apache.camel.util.jsse.TrustManagersParameters;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -33,25 +43,26 @@ import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.config.SslConfigs;
 
 @UriParams
-public class KafkaConfiguration {
+public class KafkaConfiguration implements Cloneable {
 
-    @UriPath @Metadata(required = "true")
-    private String brokers;
-
-    @UriParam @Metadata(required = "true")
+    //Common configuration properties
+    @UriPath(label = "common") @Metadata(required = "true")
     private String topic;
-    @UriParam
+    @UriParam(label = "common")
+    private String brokers;
+    @UriParam(label = "common")
+    private String clientId;
+
+    @UriParam(label = "consumer")
     private String groupId;
-    @UriParam(defaultValue = KafkaConstants.KAFKA_DEFAULT_PARTITIONER)
-    private String partitioner = KafkaConstants.KAFKA_DEFAULT_PARTITIONER;
     @UriParam(label = "consumer", defaultValue = "10")
     private int consumerStreams = 10;
     @UriParam(label = "consumer", defaultValue = "1")
     private int consumersCount = 1;
 
-    //Common configuration properties
-    @UriParam
-    private String clientId;
+    //interceptor.classes
+    @UriParam(label = "common,monitoring")
+    private String interceptorClasses;
 
     //key.deserializer
     @UriParam(label = "consumer", defaultValue = KafkaConstants.KAFKA_DEFAULT_DESERIALIZER)
@@ -60,8 +71,11 @@ public class KafkaConfiguration {
     @UriParam(label = "consumer", defaultValue = KafkaConstants.KAFKA_DEFAULT_DESERIALIZER)
     private String valueDeserializer = KafkaConstants.KAFKA_DEFAULT_DESERIALIZER;
     //fetch.min.bytes
-    @UriParam(label = "consumer", defaultValue = "1024")
-    private Integer fetchMinBytes = 1024;
+    @UriParam(label = "consumer", defaultValue = "1")
+    private Integer fetchMinBytes = 1;
+    //fetch.min.bytes
+    @UriParam(label = "consumer", defaultValue = "52428800")
+    private Integer fetchMaxBytes = 50 * 1024 * 1024;
     //heartbeat.interval.ms
     @UriParam(label = "consumer", defaultValue = "3000")
     private Integer heartbeatIntervalMs = 3000;
@@ -69,8 +83,10 @@ public class KafkaConfiguration {
     @UriParam(label = "consumer", defaultValue = "1048576")
     private Integer maxPartitionFetchBytes = 1048576;
     //session.timeout.ms
-    @UriParam(label = "consumer", defaultValue = "30000")
-    private Integer sessionTimeoutMs = 30000;
+    @UriParam(label = "consumer", defaultValue = "10000")
+    private Integer sessionTimeoutMs = 10000;
+    @UriParam(label = "consumer", defaultValue = "500")
+    private Integer maxPollRecords;
     @UriParam(label = "consumer", defaultValue = "5000")
     private Long pollTimeoutMs = 5000L;
     //auto.offset.reset1
@@ -91,16 +107,28 @@ public class KafkaConfiguration {
     //fetch.max.wait.ms
     @UriParam(label = "consumer", defaultValue = "500")
     private Integer fetchWaitMaxMs = 500;
-    @UriParam(label = "consumer")
-    private boolean seekToBeginning;
+    @UriParam(label = "consumer", enums = "beginning,end")
+    private String seekTo;
 
     //Consumer configuration properties
-    @UriParam(label = "consumer")
-    private String consumerId;
     @UriParam(label = "consumer", defaultValue = "true")
     private Boolean autoCommitEnable = true;
+    @UriParam(label = "consumer", defaultValue = "sync", enums = "sync,async,none")
+    private String autoCommitOnStop = "sync";
+    @UriParam(label = "consumer")
+    private boolean breakOnFirstError;
+    @UriParam(label = "consumer")
+    private StateRepository<String, String> offsetRepository;
+
+    //Producer Camel specific configuration properties
+    @UriParam(label = "producer")
+    private boolean bridgeEndpoint;
+    @UriParam(label = "producer", defaultValue = "true")
+    private boolean circularTopicDetection = true;
 
     //Producer configuration properties
+    @UriParam(label = "producer", defaultValue = KafkaConstants.KAFKA_DEFAULT_PARTITIONER)
+    private String partitioner = KafkaConstants.KAFKA_DEFAULT_PARTITIONER;
     @UriParam(label = "producer", defaultValue = "100")
     private Integer retryBackoffMs = 100;
 
@@ -114,11 +142,15 @@ public class KafkaConfiguration {
     //Async producer config
     @UriParam(label = "producer", defaultValue = "10000")
     private Integer queueBufferingMaxMessages = 10000;
-    @UriParam(label = "producer")
-    private String serializerClass;
-    @UriParam(label = "producer")
-    private String keySerializerClass;
+    @UriParam(label = "producer", defaultValue = KafkaConstants.KAFKA_DEFAULT_SERIALIZER)
+    private String serializerClass = KafkaConstants.KAFKA_DEFAULT_SERIALIZER;
+    @UriParam(label = "producer", defaultValue = KafkaConstants.KAFKA_DEFAULT_SERIALIZER)
+    private String keySerializerClass = KafkaConstants.KAFKA_DEFAULT_SERIALIZER;
 
+    @UriParam(label = "producer")
+    private String key;
+    @UriParam(label = "producer")
+    private Integer partitionKey;
     @UriParam(label = "producer", enums = "-1,0,1,all", defaultValue = "1")
     private String requestRequiredAcks = "1";
     //buffer.memory
@@ -130,22 +162,6 @@ public class KafkaConfiguration {
     //retries
     @UriParam(label = "producer", defaultValue = "0")
     private Integer retries = 0;
-    // SSL
-    // ssl.key.password
-    @UriParam(label = "producer")
-    private String sslKeyPassword;
-    // ssl.keystore.location
-    @UriParam(label = "producer")
-    private String sslKeystoreLocation;
-    // ssl.keystore.password
-    @UriParam(label = "producer")
-    private String sslKeystorePassword;
-    //ssl.truststore.location
-    @UriParam(label = "producer")
-    private String sslTruststoreLocation;
-    //ssl.truststore.password
-    @UriParam(label = "producer")
-    private String sslTruststorePassword;
     //batch.size
     @UriParam(label = "producer", defaultValue = "16384")
     private Integer producerBatchSize = 16384;
@@ -162,37 +178,16 @@ public class KafkaConfiguration {
     @UriParam(label = "producer", defaultValue = "1048576")
     private Integer maxRequestSize = 1048576;
     //receive.buffer.bytes
-    @UriParam(label = "producer", defaultValue = "32768")
-    private Integer receiveBufferBytes = 32768;
+    @UriParam(label = "producer", defaultValue = "65536")
+    private Integer receiveBufferBytes = 65536;
     //request.timeout.ms
-    @UriParam(label = "producer", defaultValue = "30000")
-    private Integer requestTimeoutMs = 30000;
-    // SASL & sucurity Protocol
-    //sasl.kerberos.service.name
-    @UriParam(label = "producer")
-    private String saslKerberosServiceName;
-    //security.protocol
-    @UriParam(label = "producer", defaultValue = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL)
-    private String securityProtocol = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL;
+    @UriParam(label = "producer", defaultValue = "305000")
+    private Integer requestTimeoutMs = 305000;
     //send.buffer.bytes
     @UriParam(label = "producer", defaultValue = "131072")
     private Integer sendBufferBytes = 131072;
-    //SSL
-    //ssl.enabled.protocols
-    @UriParam(label = "producer", defaultValue = SslConfigs.DEFAULT_SSL_ENABLED_PROTOCOLS)
-    private String sslEnabledProtocols = SslConfigs.DEFAULT_SSL_ENABLED_PROTOCOLS;
-    //ssl.keystore.type
-    @UriParam(label = "producer", defaultValue = SslConfigs.DEFAULT_SSL_KEYSTORE_TYPE)
-    private String sslKeystoreType = SslConfigs.DEFAULT_SSL_KEYSTORE_TYPE;
-    //ssl.protocol
-    @UriParam(label = "producer", defaultValue = SslConfigs.DEFAULT_SSL_PROTOCOL)
-    private String sslProtocol = SslConfigs.DEFAULT_SSL_PROTOCOL;
-    //ssl.provider
-    @UriParam(label = "producer")
-    private String sslProvider;
-    //ssl.truststore.type
-    @UriParam(label = "producer", defaultValue = SslConfigs.DEFAULT_SSL_TRUSTSTORE_TYPE)
-    private String sslTruststoreType = SslConfigs.DEFAULT_SSL_TRUSTSTORE_TYPE;
+    @UriParam(label = "producer", defaultValue = "true")
+    private boolean recordMetadata = true;
     //max.in.flight.requests.per.connection
     @UriParam(label = "producer", defaultValue = "5")
     private Integer maxInFlightRequest = 5;
@@ -211,36 +206,103 @@ public class KafkaConfiguration {
     //reconnect.backoff.ms
     @UriParam(label = "producer", defaultValue = "50")
     private Integer reconnectBackoffMs = 50;
-    //SASL
-    //sasl.kerberos.kinit.cmd
-    @UriParam(label = "producer", defaultValue = SaslConfigs.DEFAULT_KERBEROS_KINIT_CMD)
-    private String kerberosInitCmd = SaslConfigs.DEFAULT_KERBEROS_KINIT_CMD;
-    //sasl.kerberos.min.time.before.relogin
-    @UriParam(label = "producer", defaultValue = "60000")
-    private Integer kerberosBeforeReloginMinTime = 60000;
-    //sasl.kerberos.ticket.renew.jitter
-    @UriParam(label = "producer", defaultValue = "0.05")
-    private Double kerberosRenewJitter = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_JITTER;
-    //sasl.kerberos.ticket.renew.window.factor
-    @UriParam(label = "producer", defaultValue = "0.8")
-    private Double kerberosRenewWindowFactor = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_WINDOW_FACTOR;
+    //enable.idempotence
+    //reconnect.backoff.ms
+    @UriParam(label = "producer", defaultValue = "false")
+    private boolean enableIdempotence;
+
+    // SSL
+    @UriParam(label = "common,security")
+    private SSLContextParameters sslContextParameters;
+
+    // SSL
+    // ssl.key.password
+    @UriParam(label = "producer,security", secret = true)
+    private String sslKeyPassword;
+    // ssl.keystore.location
+    @UriParam(label = "producer,security")
+    private String sslKeystoreLocation;
+    // ssl.keystore.password
+    @UriParam(label = "producer,security", secret = true)
+    private String sslKeystorePassword;
+    //ssl.truststore.location
+    @UriParam(label = "producer,security")
+    private String sslTruststoreLocation;
+    //ssl.truststore.password
+    @UriParam(label = "producer,security", secret = true)
+    private String sslTruststorePassword;
+    //SSL
+    //ssl.enabled.protocols
+    @UriParam(label = "common,security", defaultValue = SslConfigs.DEFAULT_SSL_ENABLED_PROTOCOLS)
+    private String sslEnabledProtocols = SslConfigs.DEFAULT_SSL_ENABLED_PROTOCOLS;
+    //ssl.keystore.type
+    @UriParam(label = "common,security", defaultValue = SslConfigs.DEFAULT_SSL_KEYSTORE_TYPE)
+    private String sslKeystoreType = SslConfigs.DEFAULT_SSL_KEYSTORE_TYPE;
+    //ssl.protocol
+    @UriParam(label = "common,security", defaultValue = SslConfigs.DEFAULT_SSL_PROTOCOL)
+    private String sslProtocol = SslConfigs.DEFAULT_SSL_PROTOCOL;
+    //ssl.provider
+    @UriParam(label = "common,security")
+    private String sslProvider;
+    //ssl.truststore.type
+    @UriParam(label = "common,security", defaultValue = SslConfigs.DEFAULT_SSL_TRUSTSTORE_TYPE)
+    private String sslTruststoreType = SslConfigs.DEFAULT_SSL_TRUSTSTORE_TYPE;
     //SSL
     //ssl.cipher.suites
-    @UriParam(label = "producer")
+    @UriParam(label = "common,security")
     private String sslCipherSuites;
     //ssl.endpoint.identification.algorithm
-    @UriParam(label = "producer")
+    @UriParam(label = "common,security")
     private String sslEndpointAlgorithm;
     //ssl.keymanager.algorithm
-    @UriParam(label = "producer", defaultValue = "SunX509")
+    @UriParam(label = "common,security", defaultValue = "SunX509")
     private String sslKeymanagerAlgorithm = "SunX509";
     //ssl.trustmanager.algorithm
-    @UriParam(label = "producer", defaultValue = "PKIX")
+    @UriParam(label = "common,security", defaultValue = "PKIX")
     private String sslTrustmanagerAlgorithm = "PKIX";
-    @UriParam(label = "producer", defaultValue = "true")
-    private boolean recordMetadata = true;
+    // SASL & sucurity Protocol
+    //sasl.kerberos.service.name
+    @UriParam(label = "common,security")
+    private String saslKerberosServiceName;
+    //security.protocol
+    @UriParam(label = "common,security", defaultValue = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL)
+    private String securityProtocol = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL;
+    //SASL
+    //sasl.kerberos.kinit.cmd
+    @UriParam(label = "common,security", defaultValue = SaslConfigs.DEFAULT_SASL_MECHANISM)
+    private String saslMechanism = SaslConfigs.DEFAULT_SASL_MECHANISM;
+    //sasl.kerberos.kinit.cmd
+    @UriParam(label = "common,security", defaultValue = SaslConfigs.DEFAULT_KERBEROS_KINIT_CMD)
+    private String kerberosInitCmd = SaslConfigs.DEFAULT_KERBEROS_KINIT_CMD;
+    //sasl.kerberos.min.time.before.relogin
+    @UriParam(label = "common,security", defaultValue = "60000")
+    private Integer kerberosBeforeReloginMinTime = 60000;
+    //sasl.kerberos.ticket.renew.jitter
+    @UriParam(label = "common,security", defaultValue = "0.05")
+    private Double kerberosRenewJitter = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_JITTER;
+    //sasl.kerberos.ticket.renew.window.factor
+    @UriParam(label = "common,security", defaultValue = "0.8")
+    private Double kerberosRenewWindowFactor = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_WINDOW_FACTOR;
+    @UriParam(label = "common,security", defaultValue = "DEFAULT")
+    //sasl.kerberos.principal.to.local.rules
+    private String kerberosPrincipalToLocalRules; 
+    @UriParam(label = "common,security", secret = true)
+    //sasl.jaas.config
+    private String saslJaasConfig;   
 
     public KafkaConfiguration() {
+    }
+
+    /**
+     * Returns a copy of this configuration
+     */
+    public KafkaConfiguration copy() {
+        try {
+            KafkaConfiguration copy = (KafkaConfiguration) clone();
+            return copy;
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeCamelException(e);
+        }
     }
 
     public Properties createProducerProperties() {
@@ -251,12 +313,7 @@ public class KafkaConfiguration {
         addPropertyIfNotNull(props, ProducerConfig.BUFFER_MEMORY_CONFIG, getBufferMemorySize());
         addPropertyIfNotNull(props, ProducerConfig.COMPRESSION_TYPE_CONFIG, getCompressionCodec());
         addPropertyIfNotNull(props, ProducerConfig.RETRIES_CONFIG, getRetries());
-        // SSL
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
+        addPropertyIfNotNull(props, ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
         addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getRetries());
         addPropertyIfNotNull(props, ProducerConfig.BATCH_SIZE_CONFIG, getProducerBatchSize());
         addPropertyIfNotNull(props, ProducerConfig.CLIENT_ID_CONFIG, getClientId());
@@ -267,17 +324,7 @@ public class KafkaConfiguration {
         addPropertyIfNotNull(props, ProducerConfig.PARTITIONER_CLASS_CONFIG, getPartitioner());
         addPropertyIfNotNull(props, ProducerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
         addPropertyIfNotNull(props, ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, getRequestTimeoutMs());
-        //SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
-        // Security protocol
-        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
         addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
-        //SSL
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
         addPropertyIfNotNull(props, ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, getMaxInFlightRequest());
         addPropertyIfNotNull(props, ProducerConfig.METADATA_MAX_AGE_CONFIG, getMetadataMaxAgeMs());
         addPropertyIfNotNull(props, ProducerConfig.METRIC_REPORTER_CLASSES_CONFIG, getMetricReporters());
@@ -285,16 +332,33 @@ public class KafkaConfiguration {
         addPropertyIfNotNull(props, ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
         addPropertyIfNotNull(props, ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
         addPropertyIfNotNull(props, ProducerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
-        //SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
-        //SSL
+        addPropertyIfNotNull(props, ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, isEnableIdempotence());
+        // SSL
+        applySslConfiguration(props, getSslContextParameters());
+        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
+        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
         addPropertyIfNotNull(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
         addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, getSslEndpointAlgorithm());
         addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
         addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
+        //SASL
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
+        addListPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES, getKerberosPrincipalToLocalRules());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_MECHANISM, getSaslMechanism());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_JAAS_CONFIG, getSaslJaasConfig());
 
         return props;
     }
@@ -304,32 +368,18 @@ public class KafkaConfiguration {
         addPropertyIfNotNull(props, ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, getKeyDeserializer());
         addPropertyIfNotNull(props, ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, getValueDeserializer());
         addPropertyIfNotNull(props, ConsumerConfig.FETCH_MIN_BYTES_CONFIG, getFetchMinBytes());
+        addPropertyIfNotNull(props, ConsumerConfig.FETCH_MAX_BYTES_CONFIG, getFetchMaxBytes());
         addPropertyIfNotNull(props, ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, getHeartbeatIntervalMs());
         addPropertyIfNotNull(props, ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, getMaxPartitionFetchBytes());
         addPropertyIfNotNull(props, ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, getSessionTimeoutMs());
-        // SSL
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
+        addPropertyIfNotNull(props, ConsumerConfig.MAX_POLL_RECORDS_CONFIG, getMaxPollRecords());
+        addPropertyIfNotNull(props, ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
         addPropertyIfNotNull(props, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, getAutoOffsetReset());
         addPropertyIfNotNull(props, ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG, getConnectionMaxIdleMs());
         addPropertyIfNotNull(props, ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, isAutoCommitEnable());
         addPropertyIfNotNull(props, ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, getPartitionAssignor());
         addPropertyIfNotNull(props, ConsumerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
         addPropertyIfNotNull(props, ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, getConsumerRequestTimeoutMs());
-        //SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
-        // Security protocol
-        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
-        addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
-        //SSL
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
         addPropertyIfNotNull(props, ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, getAutoCommitIntervalMs());
         addPropertyIfNotNull(props, ConsumerConfig.CHECK_CRCS_CONFIG, getCheckCrcs());
         addPropertyIfNotNull(props, ConsumerConfig.CLIENT_ID_CONFIG, getClientId());
@@ -340,23 +390,106 @@ public class KafkaConfiguration {
         addPropertyIfNotNull(props, ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
         addPropertyIfNotNull(props, ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
         addPropertyIfNotNull(props, ConsumerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
-        //SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
-        //SSL
+        
+        // SSL
+        applySslConfiguration(props, getSslContextParameters());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
         addPropertyIfNotNull(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
         addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, getSslEndpointAlgorithm());
         addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
         addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
+        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
+        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
+        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+        // Security protocol
+        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
+        addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
+        //SASL
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
+        addListPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES, getKerberosPrincipalToLocalRules());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_MECHANISM, getSaslMechanism());
+        addPropertyIfNotNull(props, SaslConfigs.SASL_JAAS_CONFIG, getSaslJaasConfig());
         return props;
+    }
+
+    /**
+     * Uses the standard camel {@link SSLContextParameters} object to fill the Kafka SSL properties
+     *
+     * @param props Kafka properties
+     * @param sslContextParameters SSL configuration
+     */
+    private void applySslConfiguration(Properties props, SSLContextParameters sslContextParameters) {
+
+        if (sslContextParameters != null) {
+            addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, sslContextParameters.getSecureSocketProtocol());
+            addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, sslContextParameters.getProvider());
+
+            CipherSuitesParameters cipherSuites = sslContextParameters.getCipherSuites();
+            if (cipherSuites != null) {
+                addCommaSeparatedList(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, cipherSuites.getCipherSuite());
+            }
+
+            SecureSocketProtocolsParameters secureSocketProtocols = sslContextParameters.getSecureSocketProtocols();
+            if (secureSocketProtocols != null) {
+                addCommaSeparatedList(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, secureSocketProtocols.getSecureSocketProtocol());
+            }
+
+            KeyManagersParameters keyManagers = sslContextParameters.getKeyManagers();
+            if (keyManagers != null) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, keyManagers.getAlgorithm());
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyManagers.getKeyPassword());
+
+                KeyStoreParameters keyStore = keyManagers.getKeyStore();
+                if (keyStore != null) {
+                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, keyStore.getType());
+                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keyStore.getResource());
+                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keyStore.getPassword());
+                }
+            }
+
+            TrustManagersParameters trustManagers = sslContextParameters.getTrustManagers();
+            if (trustManagers != null) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, trustManagers.getAlgorithm());
+
+                KeyStoreParameters keyStore = trustManagers.getKeyStore();
+                if (keyStore != null) {
+                    addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, keyStore.getType());
+                    addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, keyStore.getResource());
+                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keyStore.getPassword());
+                }
+            }
+        }
     }
 
     private static <T> void addPropertyIfNotNull(Properties props, String key, T value) {
         if (value != null) {
             // Kafka expects all properties as String
             props.put(key, value.toString());
+        }
+    }
+
+    private static <T> void addListPropertyIfNotNull(Properties props, String key, T value) {
+        if (value != null) {
+            // Kafka expects all properties as String
+            String[] values = value.toString().split(",");
+            List<String> list = Arrays.asList(values);
+            props.put(key, list);
+        }
+    }
+
+    private static void addCommaSeparatedList(Properties props, String key, List<String> values) {
+        if (values != null && !values.isEmpty()) {
+            props.put(key, values.stream().collect(Collectors.joining(",")));
         }
     }
 
@@ -367,9 +500,37 @@ public class KafkaConfiguration {
     /**
      * A string that uniquely identifies the group of consumer processes to which this consumer belongs.
      * By setting the same group id multiple processes indicate that they are all part of the same consumer group.
+     *
+     * This option is required for consumers.
      */
     public void setGroupId(String groupId) {
         this.groupId = groupId;
+    }
+
+    public boolean isBridgeEndpoint() {
+        return bridgeEndpoint;
+    }
+
+    /**
+     * If the option is true, then KafkaProducer will ignore the KafkaConstants.TOPIC header setting of the inbound message.
+     */
+    public void setBridgeEndpoint(boolean bridgeEndpoint) {
+        this.bridgeEndpoint = bridgeEndpoint;
+    }
+
+    public boolean isCircularTopicDetection() {
+        return circularTopicDetection;
+    }
+
+    /**
+     * If the option is true, then KafkaProducer will detect if the message is attempted to be sent back to the same topic
+     * it may come from, if the message was original from a kafka consumer. If the KafkaConstants.TOPIC header is the
+     * same as the original kafka consumer topic, then the header setting is ignored, and the topic of the producer
+     * endpoint is used. In other words this avoids sending the same message back to where it came from.
+     * This option is not in use if the option bridgeEndpoint is set to true.
+     */
+    public void setCircularTopicDetection(boolean circularTopicDetection) {
+        this.circularTopicDetection = circularTopicDetection;
     }
 
     public String getPartitioner() {
@@ -389,6 +550,9 @@ public class KafkaConfiguration {
 
     /**
      * Name of the topic to use.
+     *
+     * On the consumer you can use comma to separate multiple topics.
+     * A producer can only send a message to a single topic.
      */
     public void setTopic(String topic) {
         this.topic = topic;
@@ -428,19 +592,8 @@ public class KafkaConfiguration {
         this.clientId = clientId;
     }
 
-    public String getConsumerId() {
-        return consumerId;
-    }
-
-    /**
-     * Generated automatically if not set.
-     */
-    public void setConsumerId(String consumerId) {
-        this.consumerId = consumerId;
-    }
-
     public Boolean isAutoCommitEnable() {
-        return autoCommitEnable;
+        return offsetRepository == null ? autoCommitEnable : false;
     }
 
     /**
@@ -449,6 +602,18 @@ public class KafkaConfiguration {
      */
     public void setAutoCommitEnable(Boolean autoCommitEnable) {
         this.autoCommitEnable = autoCommitEnable;
+    }
+
+    public StateRepository<String, String> getOffsetRepository() {
+        return offsetRepository;
+    }
+
+    /**
+     * The offset repository to use in order to locally store the offset of each partition of the topic.
+     * Defining one will disable the autocommit.
+     */
+    public void setOffsetRepository(StateRepository<String, String> offsetRepository) {
+        this.offsetRepository = offsetRepository;
     }
 
     public Integer getAutoCommitIntervalMs() {
@@ -472,6 +637,21 @@ public class KafkaConfiguration {
      */
     public void setFetchMinBytes(Integer fetchMinBytes) {
         this.fetchMinBytes = fetchMinBytes;
+    }
+
+    /**
+     * The maximum amount of data the server should return for a fetch request
+     * This is not an absolute maximum, if the first message in the first non-empty partition of the fetch is larger than
+     * this value, the message will still be returned to ensure that the consumer can make progress.
+     * The maximum message size accepted by the broker is defined via message.max.bytes (broker config) or
+     * max.message.bytes (topic config). Note that the consumer performs multiple fetches in parallel.
+     */
+    public Integer getFetchMaxBytes() {
+        return fetchMaxBytes;
+    }
+
+    public void setFetchMaxBytes(Integer fetchMaxBytes) {
+        this.fetchMaxBytes = fetchMaxBytes;
     }
 
     public Integer getFetchWaitMaxMs() {
@@ -499,16 +679,44 @@ public class KafkaConfiguration {
         this.autoOffsetReset = autoOffsetReset;
     }
 
+    public String getAutoCommitOnStop() {
+        return autoCommitOnStop;
+    }
+
+    /**
+     * Whether to perform an explicit auto commit when the consumer stops to ensure the broker
+     * has a commit from the last consumed message. This requires the option autoCommitEnable is turned on.
+     * The possible values are: sync, async, or none. And sync is the default value.
+     */
+    public void setAutoCommitOnStop(String autoCommitOnStop) {
+        this.autoCommitOnStop = autoCommitOnStop;
+    }
+
+    public boolean isBreakOnFirstError() {
+        return breakOnFirstError;
+    }
+
+    /**
+     * This options controls what happens when a consumer is processing an exchange and it fails.
+     * If the option is <tt>false</tt> then the consumer continues to the next message and processes it.
+     * If the option is <tt>true</tt> then the consumer breaks out, and will seek back to offset of the
+     * message that caused a failure, and then re-attempt to process this message. However this can lead
+     * to endless processing of the same message if its bound to fail every time, eg a poison message.
+     * Therefore its recommended to deal with that for example by using Camel's error handler.
+     */
+    public void setBreakOnFirstError(boolean breakOnFirstError) {
+        this.breakOnFirstError = breakOnFirstError;
+    }
+
     public String getBrokers() {
         return brokers;
     }
 
     /**
-     * This is for bootstrapping and the producer will only use it for getting metadata (topics, partitions and replicas).
-     * The socket connections for sending the actual data will be established based on the broker information returned in the metadata.
+     * URL of the Kafka brokers to use.
      * The format is host1:port1,host2:port2, and the list can be a subset of brokers or a VIP pointing to a subset of brokers.
      * <p/>
-     * This option is known as <tt>metadata.broker.list</tt> in the Kafka documentation.
+     * This option is known as <tt>bootstrap.servers</tt> in the Kafka documentation.
      */
     public void setBrokers(String brokers) {
         this.brokers = brokers;
@@ -572,24 +780,17 @@ public class KafkaConfiguration {
     }
 
     public String getSerializerClass() {
-        if (serializerClass == null) {
-            return KafkaConstants.KAFKA_DEFAULT_SERIALIZER;
-        }
         return serializerClass;
     }
 
     /**
-     * The serializer class for messages. The default encoder takes a byte[] and returns the same byte[].
-     * The default class is kafka.serializer.DefaultEncoder
+     * The serializer class for messages.
      */
     public void setSerializerClass(String serializerClass) {
         this.serializerClass = serializerClass;
     }
 
     public String getKeySerializerClass() {
-        if (keySerializerClass == null) {
-            return KafkaConstants.KAFKA_DEFAULT_SERIALIZER;
-        }
         return keySerializerClass;
     }
 
@@ -643,6 +844,22 @@ public class KafkaConfiguration {
      */
     public void setKerberosRenewWindowFactor(Double kerberosRenewWindowFactor) {
         this.kerberosRenewWindowFactor = kerberosRenewWindowFactor;
+    }
+
+    public String getKerberosPrincipalToLocalRules() {
+        return kerberosPrincipalToLocalRules;
+    }
+
+    /**
+     * A list of rules for mapping from principal names to short names (typically operating system usernames).
+     * The rules are evaluated in order and the first rule that matches a principal name is used to map it to a short name. Any later rules in the list are ignored.
+     * By default, principal names of the form {username}/{hostname}@{REALM} are mapped to {username}.
+     * For more details on the format please see <a href=\"#security_authz\"> security authorization and acls</a>.
+     * <p/>
+     * Multiple values can be separated by comma
+     */
+    public void setKerberosPrincipalToLocalRules(String kerberosPrincipalToLocalRules) {
+        this.kerberosPrincipalToLocalRules = kerberosPrincipalToLocalRules;
     }
 
     public String getSslCipherSuites() {
@@ -762,6 +979,32 @@ public class KafkaConfiguration {
         this.saslKerberosServiceName = saslKerberosServiceName;
     }
 
+    public String getSaslMechanism() {
+        return saslMechanism;
+    }
+
+    /**
+     * The Simple Authentication and Security Layer (SASL) Mechanism used.
+     * For the valid values see <a href="http://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml">http://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xhtml</a>
+     */
+    public void setSaslMechanism(String saslMechanism) {
+        this.saslMechanism = saslMechanism;
+    }
+    
+    public String getSaslJaasConfig() {
+        return saslJaasConfig;
+    }
+
+    /**
+     * Expose the kafka sasl.jaas.config parameter
+     * 
+     * Example:
+     * org.apache.kafka.common.security.plain.PlainLoginModule required username="USERNAME" password="PASSWORD";
+     */
+    public void setSaslJaasConfig(String saslMechanism) {
+        this.saslJaasConfig = saslMechanism;
+    }
+
     public String getSecurityProtocol() {
         return securityProtocol;
     }
@@ -772,6 +1015,18 @@ public class KafkaConfiguration {
     public void setSecurityProtocol(String securityProtocol) {
         this.securityProtocol = securityProtocol;
     }
+
+    public SSLContextParameters getSslContextParameters() {
+        return sslContextParameters;
+    }
+
+    /**
+     * SSL configuration using a Camel {@link SSLContextParameters} object. If configured it's applied before the other SSL endpoint parameters.
+     */
+    public void setSslContextParameters(SSLContextParameters sslContextParameters) {
+        this.sslContextParameters = sslContextParameters;
+    }
+
 
     public String getSslKeyPassword() {
         return sslKeyPassword;
@@ -845,6 +1100,30 @@ public class KafkaConfiguration {
      */
     public void setBufferMemorySize(Integer bufferMemorySize) {
         this.bufferMemorySize = bufferMemorySize;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    /**
+     * The record key (or null if no key is specified).
+     * If this option has been configured then it take precedence over header {@link KafkaConstants#KEY}
+     */
+    public void setKey(String key) {
+        this.key = key;
+    }
+
+    public Integer getPartitionKey() {
+        return partitionKey;
+    }
+
+    /**
+     * The partition to which the record will be sent (or null if no partition was specified).
+     * If this option has been configured then it take precedence over header {@link KafkaConstants#PARTITION_KEY}
+     */
+    public void setPartitionKey(Integer partitionKey) {
+        this.partitionKey = partitionKey;
     }
 
     public String getRequestRequiredAcks() {
@@ -1076,6 +1355,17 @@ public class KafkaConfiguration {
         this.sessionTimeoutMs = sessionTimeoutMs;
     }
 
+    public Integer getMaxPollRecords() {
+        return maxPollRecords;
+    }
+
+    /**
+     * The maximum number of records returned in a single call to poll()
+     */
+    public void setMaxPollRecords(Integer maxPollRecords) {
+        this.maxPollRecords = maxPollRecords;
+    }
+
     public Long getPollTimeoutMs() {
         return pollTimeoutMs;
     }
@@ -1147,15 +1437,19 @@ public class KafkaConfiguration {
         this.valueDeserializer = valueDeserializer;
     }
 
-    public boolean isSeekToBeginning() {
-        return seekToBeginning;
+    public String getSeekTo() {
+        return seekTo;
     }
 
     /**
-     * If the option is true, then KafkaConsumer will read from beginning on startup.
+     * Set if KafkaConsumer will read from beginning or end on startup:
+     * beginning : read from beginning
+     * end : read from end
+     * 
+     * This is replacing the earlier property seekToBeginning
      */
-    public void setSeekToBeginning(boolean seekToBeginning) {
-        this.seekToBeginning = seekToBeginning;
+    public void setSeekTo(String seekTo) {
+        this.seekTo = seekTo;
     }
 
     public ExecutorService getWorkerPool() {
@@ -1206,5 +1500,32 @@ public class KafkaConfiguration {
      */
     public void setRecordMetadata(boolean recordMetadata) {
         this.recordMetadata = recordMetadata;
+    }
+
+
+    public String getInterceptorClasses() {
+        return interceptorClasses;
+    }
+    /**
+     * Sets interceptors for producer or consumers.
+     * Producer interceptors have to be classes implementing {@link org.apache.kafka.clients.producer.ProducerInterceptor}
+     * Consumer interceptors have to be classes implementing {@link org.apache.kafka.clients.consumer.ConsumerInterceptor}
+     * Note that if you use Producer interceptor on a consumer it will throw a class cast exception in runtime
+     */
+    public void setInterceptorClasses(String interceptorClasses) {
+        this.interceptorClasses = interceptorClasses;
+    }
+
+    public boolean isEnableIdempotence() {
+        return enableIdempotence;
+    }
+
+    /**
+     * If set to 'true' the producer will ensure that exactly one copy of each message is written in the stream. If 'false', producer 
+     * retries may write duplicates of the retried message in the stream. If set to true this option will require max.in.flight.requests.per.connection to be set to 1 and 
+     * retries cannot be zero and additionally acks must be set to 'all'. 
+     */
+    public void setEnableIdempotence(boolean enableIdempotence) {
+        this.enableIdempotence = enableIdempotence;
     }
 }

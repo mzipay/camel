@@ -39,8 +39,11 @@ public class RestConfiguration {
 
     private String component;
     private String apiComponent;
+    private String producerComponent;
+    private String producerApiDoc;
     private String scheme;
     private String host;
+    private String apiHost;
     private int port;
     private String contextPath;
     private String apiContextPath;
@@ -97,6 +100,45 @@ public class RestConfiguration {
     }
 
     /**
+     * Gets the name of the Camel component to use as the REST producer
+     *
+     * @return the component name, or <tt>null</tt> to let Camel search the {@link Registry} to find suitable implementation
+     */
+    public String getProducerComponent() {
+        return producerComponent;
+    }
+
+    /**
+     * Sets the name of the Camel component to use as the REST producer
+     *
+     * @param componentName the name of the component (such as restlet, jetty, etc.)
+     */
+    public void setProducerComponent(String componentName) {
+        this.producerComponent = componentName;
+    }
+
+    /**
+     * Gets the location of the api document (swagger api) the REST producer will use
+     * to validate the REST uri and query parameters are valid accordingly to the api document.
+     */
+    public String getProducerApiDoc() {
+        return producerApiDoc;
+    }
+
+    /**
+     * Sets the location of the api document (swagger api) the REST producer will use
+     * to validate the REST uri and query parameters are valid accordingly to the api document.
+     * This requires adding camel-swagger-java to the classpath, and any miss configuration
+     * will let Camel fail on startup and report the error(s).
+     * <p/>
+     * The location of the api document is loaded from classpath by default, but you can use
+     * <tt>file:</tt> or <tt>http:</tt> to refer to resources to load from file or http url.
+     */
+    public void setProducerApiDoc(String producerApiDoc) {
+        this.producerApiDoc = producerApiDoc;
+    }
+
+    /**
      * Gets the hostname to use by the REST consumer
      *
      * @return the hostname, or <tt>null</tt> to use default hostname
@@ -112,6 +154,19 @@ public class RestConfiguration {
      */
     public void setHost(String host) {
         this.host = host;
+    }
+
+    public String getApiHost() {
+        return apiHost;
+    }
+
+    /**
+     * To use an specific hostname for the API documentation (eg swagger)
+     * <p/>
+     * This can be used to override the generated host with this configured hostname
+     */
+    public void setApiHost(String apiHost) {
+        this.apiHost = apiHost;
     }
 
     /**

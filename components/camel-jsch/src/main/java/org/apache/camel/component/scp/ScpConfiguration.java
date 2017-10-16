@@ -46,6 +46,8 @@ public class ScpConfiguration extends RemoteFileConfiguration {
     // null means default jsch list will be used
     @UriParam(label = "security,advanced")
     private String ciphers;
+    @UriParam(label = "security", secret = true)
+    private String preferredAuthentications;
 
     public ScpConfiguration() {
         setProtocol("scp");
@@ -66,6 +68,7 @@ public class ScpConfiguration extends RemoteFileConfiguration {
 
     /**
      * Sets the known_hosts file, so that the jsch endpoint can do host key verification.
+     * You can prefix with classpath: to load the file from classpath instead of file system.
      */
     public void setKnownHostsFile(String knownHostsFile) {
         this.knownHostsFile = knownHostsFile;
@@ -87,7 +90,8 @@ public class ScpConfiguration extends RemoteFileConfiguration {
     }
 
     /**
-     * Set the private key file to that the SFTP endpoint can do private key verification.
+     * Set the private key file to that the endpoint can do private key verification.
+     * You can prefix with classpath: to load the file from classpath instead of file system.
      */
     public void setPrivateKeyFile(String privateKeyFile) {
         this.privateKeyFile = privateKeyFile;
@@ -98,7 +102,7 @@ public class ScpConfiguration extends RemoteFileConfiguration {
     }
 
     /**
-     * Set the private key file passphrase to that the SFTP endpoint can do private key verification.
+     * Set the private key file passphrase to that the endpoint can do private key verification.
      */
     public void setPrivateKeyFilePassphrase(String privateKeyFilePassphrase) {
         this.privateKeyFilePassphrase = privateKeyFilePassphrase;
@@ -148,6 +152,19 @@ public class ScpConfiguration extends RemoteFileConfiguration {
 
     public String getCiphers() {
         return ciphers;
+    }
+
+    /**
+     * Set a comma separated list of authentications that will be used in order of preference.
+     * Possible authentication methods are defined by JCraft JSCH. Some examples include: gssapi-with-mic,publickey,keyboard-interactive,password
+     * If not specified the JSCH and/or system defaults will be used.
+     */
+    public void setPreferredAuthentications(final String preferredAuthentications) {
+        this.preferredAuthentications = preferredAuthentications;
+    }
+
+    public String getPreferredAuthentications() {
+        return preferredAuthentications;
     }
 
 }

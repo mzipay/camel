@@ -35,20 +35,19 @@ import org.apache.hadoop.fs.PathFilter;
 
 public final class HdfsConsumer extends ScheduledPollConsumer {
 
+    public static final long DEFAULT_CONSUMER_INITIAL_DELAY = 10 * 1000L;
+
     private final HdfsConfiguration config;
     private final StringBuilder hdfsPath;
     private final Processor processor;
     private final ReadWriteLock rwlock = new ReentrantReadWriteLock();
     private volatile HdfsInputStream istream;
-
+    
     public HdfsConsumer(HdfsEndpoint endpoint, Processor processor, HdfsConfiguration config) {
         super(endpoint, processor);
         this.config = config;
         this.hdfsPath = config.getFileSystemType().getHdfsPath(config);
         this.processor = processor;
-
-        setInitialDelay(config.getInitialDelay());
-        setDelay(config.getDelay());
         setUseFixedDelay(true);
     }
 
@@ -153,7 +152,7 @@ public final class HdfsConsumer extends ScheduledPollConsumer {
                 Holder<Object> value = new Holder<Object>();
                 while (this.istream.next(key, value) >= 0) {
                     Exchange exchange = this.getEndpoint().createExchange();
-                    Message message = new DefaultMessage();
+                    Message message = new DefaultMessage(this.getEndpoint().getCamelContext());
                     String fileName = StringUtils.substringAfterLast(status.getPath().toString(), "/");
                     message.setHeader(Exchange.FILE_NAME, fileName);
                     if (key.value != null) {

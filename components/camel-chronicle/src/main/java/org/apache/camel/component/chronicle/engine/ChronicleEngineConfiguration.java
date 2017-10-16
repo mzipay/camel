@@ -17,85 +17,28 @@
 package org.apache.camel.component.chronicle.engine;
 
 import net.openhft.chronicle.wire.WireType;
-import org.apache.camel.CamelContext;
-import org.apache.camel.CamelContextAware;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 
 @UriParams
-public class ChronicleEngineConfiguration implements CamelContextAware {
+public class ChronicleEngineConfiguration {
 
     @UriParam(defaultValue = "BINARY", javaType = "java.lang.String")
     private WireType wireType = WireType.BINARY;
-
     @UriParam(defaultValue = "true")
     private boolean subscribeMapEvents = true;
-
     @UriParam(javaType = "java.lang.String")
     private String[] filteredMapEvents;
-
     @UriParam
     private boolean subscribeTopologicalEvents;
-
     @UriParam
     private boolean subscribeTopicEvents;
-
-    @UriParam
+    @UriParam(enums = "PUBLISH,PUBLISH_AND_INDEX,PPUT,PGET_AND_PUT,PPUT_ALL,PPUT_IF_ABSENT,PGET,PGET_AND_REMOVE,PREMOVE,PIS_EMPTY,PSIZE")
     private String action;
-
     @UriParam(defaultValue = "true")
     private boolean persistent = true;
-
-    private CamelContext camelContext;
-    private String[] addresses;
-    private String path;
-
-    // ****************************
-    //
-    // ****************************
-
-    @Override
-    public CamelContext getCamelContext() {
-        return camelContext;
-    }
-
-    @Override
-    public void setCamelContext(CamelContext camelContext) {
-        this.camelContext = camelContext;
-    }
-
-    public String[] getAddresses() {
-        return addresses;
-    }
-
-    /**
-     * Description
-     */
-    public void setAddresses(String addresses) {
-        setAddresses(addresses.split(","));
-    }
-
-    /**
-     * Description
-     */
-    public void setAddresses(String[] addresses) {
-        this.addresses = addresses;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    /**
-     * Description
-     */
-    public void setPath(String path) {
-        this.path = path;
-
-        if (!this.path.startsWith("/")) {
-            this.path = "/" + this.path;
-        }
-    }
+    @UriParam
+    private String clusterName;
 
     // ****************************
     // CLIENT OPTIONS
@@ -106,14 +49,14 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * The Wire type to use, default to binary wire.
      */
     public void setWireType(String wireType) {
         setWireType(WireType.valueOf(wireType));
     }
 
     /**
-     * Description
+     * The Wire type to use, default to binary wire.
      */
     public void setWireType(WireType wireType) {
         this.wireType = wireType;
@@ -128,7 +71,7 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * Set if consumer should subscribe to Map events, default true.
      */
     public void setSubscribeMapEvents(boolean subscribeMapEvents) {
         this.subscribeMapEvents = subscribeMapEvents;
@@ -139,14 +82,14 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * A comma separated list of Map event type to filer, valid values are: INSERT, UPDATE, REMOVE.
      */
     public void setFilteredMapEvents(String filteredMapEvents) {
         setFilteredMapEvents(filteredMapEvents.split(","));
     }
 
     /**
-     * Description
+     * The list of Map event type to filer, valid values are: INSERT, UPDATE, REMOVE.
      */
     public void setFilteredMapEvents(String[] filteredMapEvents) {
         this.filteredMapEvents = filteredMapEvents;
@@ -161,7 +104,7 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * Set if consumer should subscribe to TopologicalEvents,d efault false.
      */
     public void setSubscribeTopologicalEvents(boolean subscribeTopologicalEvents) {
         this.subscribeTopologicalEvents = subscribeTopologicalEvents;
@@ -176,7 +119,7 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * Set if consumer should subscribe to TopicEvents,d efault false.
      */
     public void setSubscribeTopicEvents(boolean subscribeTopicEvents) {
         this.subscribeTopicEvents = subscribeTopicEvents;
@@ -191,7 +134,18 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * The default action to perform, valid values are:
+     * - PUBLISH
+     * - PPUBLISH_AND_INDEX
+     * - PPUT
+     * - PGET_AND_PUT
+     * - PPUT_ALL
+     * - PPUT_IF_ABSENT
+     * - PGET
+     * - PGET_AND_REMOVE
+     * - PREMOVE
+     * - PIS_EMPTY
+     * - PSIZE
      */
     public void setAction(String action) {
         this.action = action;
@@ -202,9 +156,20 @@ public class ChronicleEngineConfiguration implements CamelContextAware {
     }
 
     /**
-     * Description
+     * Enable/disable data persistence
      */
     public void setPersistent(boolean persistent) {
         this.persistent = persistent;
+    }
+
+    public String getClusterName() {
+        return clusterName;
+    }
+
+    /**
+     * Cluster name for queue
+     */
+    public void setClusterName(String clusterName) {
+        this.clusterName = clusterName;
     }
 }

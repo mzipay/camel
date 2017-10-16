@@ -200,9 +200,19 @@ public class ExpressionClauseSupport<T> {
 
     /**
      * An expression of the exchange properties
+     *
+     * @deprecated use {@link #exchangeProperties()} instead
      */
+    @Deprecated
     public T properties() {
-        return expression(ExpressionBuilder.propertiesExpression());
+        return exchangeProperties();
+    }
+
+    /**
+     * An expression of the exchange properties
+     */
+    public T exchangeProperties() {
+        return expression(ExpressionBuilder.exchangePropertiesExpression());
     }
 
     // Languages
@@ -297,6 +307,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T el(String text) {
         return expression(new ELExpression(text));
     }
@@ -354,6 +365,22 @@ public class ExpressionClauseSupport<T> {
      * expression</a>
      *
      * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, boolean allowSimple) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        return expression(expression);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
      * @param resultType the return type expected by the expression
      * @return the builder to continue processing the DSL
      */
@@ -382,11 +409,114 @@ public class ExpressionClauseSupport<T> {
     }
 
     /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @param resultType the return type expected by the expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, boolean allowSimple, Class<?> resultType) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        expression.setResultType(resultType);
+        setExpressionType(expression);
+        return result;
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @param resultType the return type expected by the expression
+     * @param headerName the name of the header to apply the expression to
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, boolean allowSimple, Class<?> resultType, String headerName) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        expression.setResultType(resultType);
+        expression.setHeaderName(headerName);
+        setExpressionType(expression);
+        return result;
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text) {
+        return jsonpathWriteAsString(text, false);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text, boolean suppressExceptions) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setWriteAsString(true);
+        expression.setSuppressExceptions(suppressExceptions);
+        return expression(expression);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text, boolean suppressExceptions, boolean allowSimple) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setWriteAsString(true);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        return expression(expression);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a> with writeAsString enabled.
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @param headerName the name of the header to apply the expression to
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpathWriteAsString(String text, boolean suppressExceptions, boolean allowSimple, String headerName) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setWriteAsString(true);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        expression.setHeaderName(headerName);
+        return expression(expression);
+    }
+
+    /**
      * Evaluates a <a href="http://commons.apache.org/jxpath/">JXPath expression</a>
      *
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T jxpath(String text) {
         return jxpath(text, false);
     }
@@ -398,6 +528,7 @@ public class ExpressionClauseSupport<T> {
      * @param lenient to configure whether lenient is in use or not
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T jxpath(String text, boolean lenient) {
         JXPathExpression answer = new JXPathExpression(text);
         answer.setLenient(lenient);
@@ -433,6 +564,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T php(String text) {
         return expression(new PhpExpression(text));
     }
@@ -444,6 +576,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T python(String text) {
         return expression(new PythonExpression(text));
     }
@@ -466,6 +599,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T ruby(String text) {
         return expression(new RubyExpression(text));
     }
@@ -488,6 +622,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T sql(String text) {
         return expression(new SqlExpression(text));
     }
@@ -656,6 +791,20 @@ public class ExpressionClauseSupport<T> {
      * @return the builder to continue processing the DSL
      */
     public T tokenize(String token, String headerName, boolean regex, int group, boolean skipFirst) {
+        return tokenize(token, headerName, regex, "" + group, skipFirst);
+    }
+
+    /**
+     * Evaluates a token expression on the given header
+     *
+     * @param token the token
+     * @param headerName name of header to tokenize
+     * @param regex whether the token is a regular expression or not
+     * @param group to group by number of parts
+     * @param skipFirst whether to skip the very first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, String headerName, boolean regex, String group, boolean skipFirst) {
         TokenizerExpression expression = new TokenizerExpression();
         expression.setToken(token);
         expression.setHeaderName(headerName);
@@ -692,13 +841,23 @@ public class ExpressionClauseSupport<T> {
      * @return the builder to continue processing the DSL
      */
     public T tokenizeXMLPair(String tagName, String inheritNamespaceTagName, int group) {
+        return tokenizeXMLPair(tagName, inheritNamespaceTagName, "" + group);
+    }
+
+    /**
+     * Evaluates a token pair expression on the message body with XML content
+     *
+     * @param tagName the the tag name of the child nodes to tokenize
+     * @param inheritNamespaceTagName  optional parent or root tag name that contains namespace(s) to inherit
+     * @param group to group by the given number
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizeXMLPair(String tagName, String inheritNamespaceTagName, String group) {
         TokenizerExpression expression = new TokenizerExpression();
         expression.setToken(tagName);
         expression.setInheritNamespaceTagName(inheritNamespaceTagName);
         expression.setXml(true);
-        if (group > 0) {
-            expression.setGroup(group);
-        }
+        expression.setGroup(group);
         setExpressionType(expression);
         return result;
     }
