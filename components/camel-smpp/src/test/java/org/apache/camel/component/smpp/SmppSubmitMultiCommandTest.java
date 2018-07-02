@@ -48,8 +48,8 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -71,7 +71,7 @@ public class SmppSubmitMultiCommandTest {
     @AfterClass
     public static void tearDownAfterClass() {
         if (defaultTimeZone != null) {
-            TimeZone.setDefault(defaultTimeZone);            
+            TimeZone.setDefault(defaultTimeZone);
         }
     }
 
@@ -408,7 +408,7 @@ public class SmppSubmitMultiCommandTest {
         exchange.getIn().setHeader(SmppConstants.PRIORITY_FLAG, (byte) 2);
         exchange.getIn().setHeader(SmppConstants.REGISTERED_DELIVERY, new RegisteredDelivery(SMSCDeliveryReceipt.FAILURE).value());
         exchange.getIn().setHeader(SmppConstants.REPLACE_IF_PRESENT_FLAG, ReplaceIfPresentFlag.REPLACE.value());
-        Map<String, String> optionalParameters = new LinkedHashMap<String, String>();
+        Map<String, String> optionalParameters = new LinkedHashMap<>();
         optionalParameters.put("SOURCE_SUBADDRESS", "1292");
         optionalParameters.put("ADDITIONAL_STATUS_INFO_TEXT", "urgent");
         optionalParameters.put("DEST_ADDR_SUBUNIT", "4");
@@ -453,7 +453,7 @@ public class SmppSubmitMultiCommandTest {
         exchange.getIn().setHeader(SmppConstants.PRIORITY_FLAG, (byte) 2);
         exchange.getIn().setHeader(SmppConstants.REGISTERED_DELIVERY, new RegisteredDelivery(SMSCDeliveryReceipt.FAILURE).value());
         exchange.getIn().setHeader(SmppConstants.REPLACE_IF_PRESENT_FLAG, ReplaceIfPresentFlag.REPLACE.value());
-        Map<Short, Object> optionalParameters = new LinkedHashMap<Short, Object>();
+        Map<Short, Object> optionalParameters = new LinkedHashMap<>();
         // standard optional parameter
         optionalParameters.put(Short.valueOf((short) 0x0202), "1292".getBytes("UTF-8"));
         optionalParameters.put(Short.valueOf((short) 0x001D), "urgent");

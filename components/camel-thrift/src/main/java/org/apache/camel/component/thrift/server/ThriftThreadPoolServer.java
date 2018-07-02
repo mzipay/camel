@@ -142,8 +142,7 @@ public class ThriftThreadPoolServer extends TServer {
         });
     }
 
-    public void waitForShutdown() {
-        int failureCount = 0;
+    private void waitForShutdown() {
         while (!stopped_) {
             try {
                 TTransport client = serverTransport_.accept();
@@ -190,7 +189,6 @@ public class ThriftThreadPoolServer extends TServer {
                 }
             } catch (TTransportException ttx) {
                 if (!stopped_) {
-                    ++failureCount;
                     LOGGER.warn("Transport error occurred during acceptance of message.", ttx);
                 }
             }

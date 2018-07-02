@@ -44,8 +44,8 @@ import org.slf4j.LoggerFactory;
 public class DefaultInflightRepository extends ServiceSupport implements InflightRepository {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultInflightRepository.class);
-    private final ConcurrentMap<String, Exchange> inflight = new ConcurrentHashMap<String, Exchange>();
-    private final ConcurrentMap<String, AtomicInteger> routeCount = new ConcurrentHashMap<String, AtomicInteger>();
+    private final ConcurrentMap<String, Exchange> inflight = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, AtomicInteger> routeCount = new ConcurrentHashMap<>();
 
     public void add(Exchange exchange) {
         inflight.put(exchange.getExchangeId(), exchange);
@@ -178,7 +178,7 @@ public class DefaultInflightRepository extends ServiceSupport implements Infligh
     protected void doStop() throws Exception {
         int count = size();
         if (count > 0) {
-            LOG.warn("Shutting down while there are still " + count + " inflight exchanges.");
+            LOG.warn("Shutting down while there are still {} inflight exchanges.", count);
         } else {
             LOG.debug("Shutting down with no inflight exchanges.");
         }

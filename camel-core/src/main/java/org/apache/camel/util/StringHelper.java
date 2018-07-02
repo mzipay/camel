@@ -20,8 +20,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.camel.util.StringQuoteHelper.doubleQuote;
 
@@ -706,6 +709,74 @@ public final class StringHelper {
         }
 
         return false;
+    }
+
+    /**
+     * Outputs the bytes in human readable format in units of KB,MB,GB etc.
+     *
+     * @param locale The locale to apply during formatting. If l is {@code null} then no localization is applied.
+     * @param bytes number of bytes
+     * @return human readable output
+     * @see java.lang.String#format(Locale, String, Object...)
+     */
+    public static String humanReadableBytes(Locale locale, long bytes) {
+        int unit = 1024;
+        if (bytes < unit) {
+            return bytes + " B";
+        }
+        int exp = (int) (Math.log(bytes) / Math.log(unit));
+        String pre = "KMGTPE".charAt(exp - 1) + "";
+        return String.format(locale, "%.1f %sB", bytes / Math.pow(unit, exp), pre);
+    }
+
+    /**
+     * Outputs the bytes in human readable format in units of KB,MB,GB etc.
+     *
+     * The locale always used is the one returned by {@link java.util.Locale#getDefault()}. 
+     *
+     * @param bytes number of bytes
+     * @return human readable output
+     * @see org.apache.camel.util.StringHelper#humanReadableBytes(Locale, long)
+     */
+    public static String humanReadableBytes(long bytes) {
+        return humanReadableBytes(Locale.getDefault(), bytes);
+    }
+
+    /**
+     * Check for string pattern matching with a number of strategies in the
+     * following order:
+     *
+     * - equals
+     * - null pattern always matches
+     * - * always matches
+     * - Ant style matching
+     * - Regexp
+     *
+     * @param patter the pattern
+     * @param target the string to test
+     * @return true if target matches the pattern
+     */
+    public static boolean matches(String patter, String target) {
+        if (Objects.equals(patter, target)) {
+            return true;
+        }
+
+        if (Objects.isNull(patter)) {
+            return true;
+        }
+
+        if (Objects.equals("*", patter)) {
+            return true;
+        }
+
+        if (AntPathMatcher.INSTANCE.match(patter, target)) {
+            return true;
+        }
+
+        Pattern p = Pattern.compile(patter);
+        Matcher m = p.matcher(target);
+
+        return m.matches();
     }
 
 }

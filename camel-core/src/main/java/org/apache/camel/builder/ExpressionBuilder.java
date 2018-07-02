@@ -765,7 +765,7 @@ public final class ExpressionBuilder {
         return new ExpressionAdapter() {
             public Object evaluate(Exchange exchange) {
                 String text = simpleExpression(propertyName).evaluate(exchange, String.class);
-                String answer = System.getenv(text);
+                String answer = System.getenv(text.toUpperCase());
                 if (answer == null) {
                     String text2 = simpleExpression(defaultValue).evaluate(exchange, String.class);
                     answer = text2;
@@ -878,7 +878,7 @@ public final class ExpressionBuilder {
      */
     public static Expression cacheExpression(final Expression expression) {
         return new ExpressionAdapter() {
-            private final AtomicReference<Object> cache = new AtomicReference<Object>();
+            private final AtomicReference<Object> cache = new AtomicReference<>();
 
             public Object evaluate(Exchange exchange) {
                 Object answer = cache.get();

@@ -211,8 +211,8 @@ public class ValidateMojo extends AbstractExecMojo {
         List<CamelEndpointDetails> endpoints = new ArrayList<>();
         List<CamelSimpleExpressionDetails> simpleExpressions = new ArrayList<>();
         List<CamelRouteDetails> routeIds = new ArrayList<>();
-        Set<File> javaFiles = new LinkedHashSet<File>();
-        Set<File> xmlFiles = new LinkedHashSet<File>();
+        Set<File> javaFiles = new LinkedHashSet<>();
+        Set<File> xmlFiles = new LinkedHashSet<>();
 
         // find all java route builder classes
         if (includeJava) {
@@ -258,7 +258,7 @@ public class ValidateMojo extends AbstractExecMojo {
                     String baseDir = ".";
                     JavaType out = Roaster.parse(file);
                     // we should only parse java classes (not interfaces and enums etc)
-                    if (out != null && out instanceof JavaClassSource) {
+                    if (out instanceof JavaClassSource) {
                         JavaClassSource clazz = (JavaClassSource) out;
                         RouteBuilderParser.parseRouteBuilderEndpoints(clazz, baseDir, fqn, fileEndpoints, unparsable, includeTest);
                         RouteBuilderParser.parseRouteBuilderSimpleExpressions(clazz, baseDir, fqn, fileSimpleExpressions);

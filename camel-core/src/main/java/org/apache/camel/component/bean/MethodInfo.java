@@ -134,6 +134,8 @@ public class MethodInfo {
             routingSlip = new RoutingSlip(camelContext);
             routingSlip.setDelimiter(routingSlipAnnotation.delimiter());
             routingSlip.setIgnoreInvalidEndpoints(routingSlipAnnotation.ignoreInvalidEndpoints());
+            routingSlip.setCacheSize(routingSlipAnnotation.cacheSize());
+
             // add created routingSlip as a service so we have its lifecycle managed
             try {
                 camelContext.addService(routingSlip);
@@ -149,6 +151,7 @@ public class MethodInfo {
             dynamicRouter = new DynamicRouter(camelContext);
             dynamicRouter.setDelimiter(dynamicRouterAnnotation.delimiter());
             dynamicRouter.setIgnoreInvalidEndpoints(dynamicRouterAnnotation.ignoreInvalidEndpoints());
+            dynamicRouter.setCacheSize(dynamicRouterAnnotation.cacheSize());
             // add created dynamicRouter as a service so we have its lifecycle managed
             try {
                 camelContext.addService(dynamicRouter);
@@ -202,7 +205,7 @@ public class MethodInfo {
     }
 
     private Map<Class<?>, Annotation> collectMethodAnnotations(Class<?> c, Method method) {
-        Map<Class<?>, Annotation> annotations = new HashMap<Class<?>, Annotation>();
+        Map<Class<?>, Annotation> annotations = new HashMap<>();
         collectMethodAnnotations(c, method, annotations);
         return annotations;
     }
@@ -262,7 +265,7 @@ public class MethodInfo {
 
             public boolean proceed(AsyncCallback callback) {
                 Object body = exchange.getIn().getBody();
-                if (body != null && body instanceof StreamCache) {
+                if (body instanceof StreamCache) {
                     // ensure the stream cache is reset before calling the method
                     ((StreamCache) body).reset();
                 }
@@ -514,7 +517,7 @@ public class MethodInfo {
             Class<?> type = method.getDeclaringClass();
 
             // create the search order of types to scan
-            List<Class<?>> typesToSearch = new ArrayList<Class<?>>();
+            List<Class<?>> typesToSearch = new ArrayList<>();
             addTypeAndSuperTypes(type, typesToSearch);
             Class<?>[] interfaces = type.getInterfaces();
             for (Class<?> anInterface : interfaces) {
@@ -566,7 +569,7 @@ public class MethodInfo {
                         if (answer == null) {
                             answer = another;
                         } else {
-                            LOG.warn("Duplicate pattern annotation: " + another + " found on annotation: " + annotation + " which will be ignored");
+                            LOG.warn("Duplicate pattern annotation: {} found on annotation: {} which will be ignored", another, annotation);
                         }
                     }
                 }
@@ -682,7 +685,7 @@ public class MethodInfo {
             Object[] answer = new Object[expressions.length];
             for (int i = 0; i < expressions.length; i++) {
 
-                if (body != null && body instanceof StreamCache) {
+                if (body instanceof StreamCache) {
                     // need to reset stream cache for each expression as you may access the message body in multiple parameters
                     ((StreamCache) body).reset();
                 }

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,8 +42,8 @@ public class FileConsumer extends GenericFileConsumer<File> {
     private String endpointPath;
     private Set<String> extendedAttributes;
 
-    public FileConsumer(FileEndpoint endpoint, Processor processor, GenericFileOperations<File> operations) {
-        super(endpoint, processor, operations);
+    public FileConsumer(FileEndpoint endpoint, Processor processor, GenericFileOperations<File> operations, GenericFileProcessStrategy<File> processStrategy) {
+        super(endpoint, processor, operations, processStrategy);
         this.endpointPath = endpoint.getConfiguration().getDirectory();
 
         if (endpoint.getExtendedAttributes() != null) {
@@ -84,6 +85,9 @@ public class FileConsumer extends GenericFileConsumer<File> {
             }
         }
         List<File> files = Arrays.asList(dirFiles);
+        if (getEndpoint().isPreSort()) {
+            Collections.sort(files, (a, b) -> a.getAbsoluteFile().compareTo(a.getAbsoluteFile()));
+        }
 
         for (File file : dirFiles) {
             // check if we can continue polling in files
@@ -192,7 +196,7 @@ public class FileConsumer extends GenericFileConsumer<File> {
      * @return wrapped as a GenericFile
      */
     public static GenericFile<File> asGenericFile(String endpointPath, File file, String charset, boolean probeContentType) {
-        GenericFile<File> answer = new GenericFile<File>(probeContentType);
+        GenericFile<File> answer = new GenericFile<>(probeContentType);
         // use file specific binding
         answer.setBinding(new FileBinding());
 

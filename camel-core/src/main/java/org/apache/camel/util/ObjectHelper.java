@@ -392,7 +392,6 @@ public final class ObjectHelper {
      * @param value  the value, if its a String it will be tested for text length as well
      * @return true if <b>not</b> empty
      */
-    @SuppressWarnings("unchecked")
     public static boolean isNotEmpty(Object value) {
         if (value == null) {
             return false;
@@ -416,9 +415,9 @@ public final class ObjectHelper {
      * @return an Optional
      */
     public static Optional<Object> firstNotNull(Object... values) {
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] != null) {
-                return Optional.of(values[i]);
+        for (Object value : values) {
+            if (value != null) {
+                return Optional.of(value);
             }
         }
 
@@ -1151,9 +1150,9 @@ public final class ObjectHelper {
 
         if (clazz == null) {
             if (needToWarn) {
-                LOG.warn("Cannot find class: " + name);
+                LOG.warn("Cannot find class: {}", name);
             } else {
-                LOG.debug("Cannot find class: " + name);
+                LOG.debug("Cannot find class: {}", name);
             }
         }
 
@@ -1533,7 +1532,7 @@ public final class ObjectHelper {
     public static List<Method> findMethodsWithAnnotation(Class<?> type,
                                                          Class<? extends Annotation> annotationType,
                                                          boolean checkMetaAnnotations) {
-        List<Method> answer = new ArrayList<Method>();
+        List<Method> answer = new ArrayList<>();
         do {
             Method[] methods = type.getDeclaredMethods();
             for (Method method : methods) {
@@ -1873,7 +1872,7 @@ public final class ObjectHelper {
      * @return the Iterable
      */
     public static Iterable<Throwable> createExceptionIterable(Throwable exception) {
-        List<Throwable> throwables = new ArrayList<Throwable>();
+        List<Throwable> throwables = new ArrayList<>();
 
         Throwable current = exception;
         // spool to the bottom of the caused by tree

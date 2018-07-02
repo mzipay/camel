@@ -327,7 +327,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         if (!hasNext()) {
             return null;
         }
-        List<Processor> answer = new ArrayList<Processor>(1);
+        List<Processor> answer = new ArrayList<>(1);
         answer.add(output);
         return answer;
     }
@@ -1219,6 +1219,18 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
                 return;
             }
 
+            if (!newException && shouldRedeliver) {
+                if (data.currentRedeliveryPolicy.isLogRetryAttempted()) {
+                    if ((data.currentRedeliveryPolicy.getRetryAttemptedLogInterval() > 1) && (data.redeliveryCounter % data.currentRedeliveryPolicy.getRetryAttemptedLogInterval()) != 0) {
+                        // do not log retry attempt because it is excluded by the retryAttemptedLogInterval
+                        return;
+                    }
+                } else {
+                    // do not log retry attempts
+                    return;
+                }
+            }
+
             if (!newException && !shouldRedeliver && !data.currentRedeliveryPolicy.isLogExhausted()) {
                 // do not log exhausted
                 return;
@@ -1460,7 +1472,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
      */
     public int getPendingRedeliveryCount() {
         int answer = redeliverySleepCounter.get();
-        if (executorService != null && executorService instanceof ThreadPoolExecutor) {
+        if (executorService instanceof ThreadPoolExecutor) {
             answer += ((ThreadPoolExecutor) executorService).getQueue().size();
         }
 

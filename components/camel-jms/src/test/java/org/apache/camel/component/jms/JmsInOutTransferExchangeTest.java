@@ -60,13 +60,15 @@ public class JmsInOutTransferExchangeTest extends CamelTestSupport {
             public void process(Exchange exchange) throws Exception {
                 exchange.getIn().setBody(new SerializableRequestDto("Restless Camel"));
                 
-                Map<String, Object> map = new HashMap<String, Object>();
+                Map<String, Object> map = new HashMap<>();
                 map.put("boolean", Boolean.TRUE);
                 map.put("string", "hello");
                 map.put("long", new Long(123));
                 map.put("double", new Double(1.23));
 
                 exchange.getIn().setHeaders(map);
+
+                exchange.setProperty("PropertyName", "PropertyValue");
             }
         });
 
@@ -88,6 +90,7 @@ public class JmsInOutTransferExchangeTest extends CamelTestSupport {
         assertEquals((Long) 123L, exchange.getIn().getHeader("long", Long.class));
         assertEquals((Double) 1.23, exchange.getIn().getHeader("double", Double.class));
         assertEquals("hello", exchange.getIn().getHeader("string", String.class));
+        assertEquals("PropertyValue", exchange.getProperty("PropertyName"));
         
         Exchange resultExchange = result.getExchanges().get(0);
         assertTrue(resultExchange.getIn() instanceof JmsMessage);
@@ -103,6 +106,7 @@ public class JmsInOutTransferExchangeTest extends CamelTestSupport {
         assertEquals((Long) 123L, exchange.getIn().getHeader("long", Long.class));
         assertEquals((Double) 1.23, exchange.getIn().getHeader("double", Double.class));
         assertEquals("hello", exchange.getIn().getHeader("string", String.class));
+        assertEquals("PropertyValue", exchange.getProperty("PropertyName"));
     }
 
     @Override

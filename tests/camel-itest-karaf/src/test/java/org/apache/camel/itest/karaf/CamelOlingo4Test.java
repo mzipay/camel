@@ -16,12 +16,10 @@
  */
 package org.apache.camel.itest.karaf;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.junit.PaxExam;
 
-@Ignore("https://issues.apache.org/jira/browse/CAMEL-11856")
 @RunWith(PaxExam.class)
 public class CamelOlingo4Test extends BaseKarafTest {
 

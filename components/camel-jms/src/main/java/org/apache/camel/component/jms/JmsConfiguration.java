@@ -280,7 +280,7 @@ public class JmsConfiguration implements Cloneable {
             + " message brokers and you want to route message from one system to another.")
     private boolean disableReplyTo;
     @UriParam(label = "consumer,advanced",
-            description = "Enables eager loading of JMS properties as soon as a message is loaded"
+            description = "Enables eager loading of JMS properties and payload as soon as a message is loaded"
                     + " which generally is inefficient as the JMS properties may not be required"
                     + " but sometimes can catch early any issues with the underlying JMS provider"
                     + " and the use of JMS properties")
@@ -484,6 +484,15 @@ public class JmsConfiguration implements Cloneable {
         + " therefore this method switches the pubSubDomain flag as well."
         + " Requires a JMS 2.0 compatible message broker.")
     private boolean subscriptionShared;
+
+    @UriParam(label = "producer,advanced", description = "Sets whether StreamMessage type is enabled or not."
+        + " Message payloads of streaming kind such as files, InputStream, etc will either by sent as BytesMessage or StreamMessage."
+        + " This option controls which kind will be used. By default BytesMessage is used which enforces the entire message payload to be read into memory."
+        + " By enabling this option the message payload is read into memory in chunks and each chunk is then written to the StreamMessage until no more data.")
+    private boolean streamMessageTypeEnabled;
+
+    @UriParam(label = "producer", description = "Sets whether JMS date properties should be formatted according to the ISO 8601 standard.")
+    private boolean formatDateHeadersToIso8601;
 
     public JmsConfiguration() {
     }
@@ -1381,7 +1390,7 @@ public class JmsConfiguration implements Cloneable {
     }
 
     /**
-     * Enables eager loading of JMS properties as soon as a message is loaded
+     * Enables eager loading of JMS properties and payload as soon as a message is loaded
      * which generally is inefficient as the JMS properties may not be required
      * but sometimes can catch early any issues with the underlying JMS provider
      * and the use of JMS properties
@@ -2193,5 +2202,35 @@ public class JmsConfiguration implements Cloneable {
     public void setSubscriptionName(String subscriptionName) {
         this.subscriptionName = subscriptionName;
     }
-    
+
+    public boolean isStreamMessageTypeEnabled() {
+        return streamMessageTypeEnabled;
+    }
+
+    /**
+     * Sets whether StreamMessage type is enabled or not.
+     * Message payloads of streaming kind such as files, InputStream, etc will either by sent as BytesMessage or StreamMessage.
+     * This option controls which kind will be used. By default BytesMessage is used which enforces the entire message payload to be read into memory.
+     * By enabling this option the message payload is read into memory in chunks and each chunk is then written to the StreamMessage until no more data.
+     */
+    public void setStreamMessageTypeEnabled(boolean streamMessageTypeEnabled) {
+        this.streamMessageTypeEnabled = streamMessageTypeEnabled;
+    }
+
+    /**
+     * Gets whether date headers should be formatted according to the ISO 8601
+     * standard.
+     */
+    public boolean isFormatDateHeadersToIso8601() {
+        return formatDateHeadersToIso8601;
+    }
+
+    /**
+     * Sets whether date headers should be formatted according to the ISO 8601
+     * standard.
+     */
+    public void setFormatDateHeadersToIso8601(boolean formatDateHeadersToIso8601) {
+        this.formatDateHeadersToIso8601 = formatDateHeadersToIso8601;
+    }
+
 }

@@ -19,8 +19,10 @@ package org.apache.camel.component.jetty.rest;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jetty.BaseJettyTest;
 import org.apache.camel.model.rest.RestParamType;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore("Does not run well on CI due test uses JMX mbeans")
 public class RestApiOverrideHostJettyTest extends BaseJettyTest {
 
     @Override
@@ -32,7 +34,6 @@ public class RestApiOverrideHostJettyTest extends BaseJettyTest {
     public void testApi() throws Exception {
         String out = template.requestBody("jetty:http://localhost:{{port}}/api-doc", null, String.class);
         assertNotNull(out);
-        System.out.println(out);
 
         assertTrue(out.contains("\"version\" : \"1.2.3\""));
         assertTrue(out.contains("\"title\" : \"The hello rest thing\""));

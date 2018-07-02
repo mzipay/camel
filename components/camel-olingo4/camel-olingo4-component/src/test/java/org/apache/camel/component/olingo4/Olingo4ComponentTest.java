@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.camel.CamelExecutionException;
-import org.apache.camel.Header;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.olingo4.api.batch.Olingo4BatchChangeRequest;
@@ -62,10 +61,21 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
     private static final String TEST_CREATE_PEOPLE = PEOPLE + "(" + TEST_CREATE_KEY + ")";
     private static final String TEST_CREATE_RESOURCE_CONTENT_ID = "1";
     private static final String TEST_UPDATE_RESOURCE_CONTENT_ID = "2";
+    private static final String TEST_CREATE_JSON = "{\n"
+            + "  \"UserName\": \"lewisblack\",\n"
+            + "  \"FirstName\": \"Lewis\",\n"
+            + "  \"LastName\": \"Black\"\n"
+            + "}";
+    private static final String TEST_UPDATE_JSON = "{\n"
+            + "  \"UserName\": \"lewisblack\",\n"
+            + "  \"FirstName\": \"Lewis\",\n"
+            + "  \"MiddleName\": \"Black\",\n"
+            + "  \"LastName\": \"Black\"\n"
+            + "}";
 
     @Test
     public void testRead() throws Exception {
-        final Map<String, Object> headers = new HashMap<String, Object>();
+        final Map<String, Object> headers = new HashMap<>();
 
         // Read metadata ($metadata) object
         final Edm metadata = (Edm)requestBodyAndHeaders("direct://readmetadata", null, headers);
@@ -107,6 +117,15 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
         final ClientEntity unbFuncReturn = (ClientEntity)requestBodyAndHeaders("direct://callunboundfunction", null, headers);
         assertNotNull(unbFuncReturn);
     }
+    
+    @Test
+    public void testReadWithFilter() {
+        // Read entity set with filter of the Airports object
+        final ClientEntitySet entities = (ClientEntitySet)requestBody("direct://readwithfilter", null);
+        
+        assertNotNull(entities);
+        assertEquals(1, entities.getEntities().size());
+    }
 
     @Test
     public void testCreateUpdateDelete() throws Exception {
@@ -139,6 +158,35 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
         }
     }
 
+    @Test
+    public void testCreateUpdateDeleteFromJson() throws Exception {
+        ClientEntity entity = requestBody("direct://create-entity", TEST_CREATE_JSON);
+        assertNotNull(entity);
+        assertEquals("Lewis", entity.getProperty("FirstName").getValue().toString());
+        assertEquals("Black", entity.getProperty("LastName").getValue().toString());
+        assertEquals("lewisblack", entity.getProperty("UserName").getValue().toString());
+        assertEquals("", entity.getProperty("MiddleName").getValue().toString());
+
+        // update
+        HttpStatusCode status = requestBody("direct://update-entity", TEST_UPDATE_JSON);
+        assertNotNull("Update status", status);
+        assertEquals("Update status", HttpStatusCode.NO_CONTENT.getStatusCode(), status.getStatusCode());
+        LOG.info("Update entity status: {}", status);
+
+        // delete
+        status = requestBody("direct://delete-entity", null);
+        assertNotNull("Delete status", status);
+        assertEquals("Delete status", HttpStatusCode.NO_CONTENT.getStatusCode(), status.getStatusCode());
+        LOG.info("Delete status: {}", status);
+
+        // check for delete
+        try {
+            requestBody("direct://read-deleted-entity", null);
+        } catch (CamelExecutionException e) {
+            assertEquals("Resource Not Found [HTTP/1.1 404 Not Found]", e.getCause().getMessage());
+        }
+    }
+
     private ClientEntity createEntity() {
         ClientEntity clientEntity = objFactory.newEntity(null);
 
@@ -151,7 +199,7 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
 
     @Test
     public void testBatch() throws Exception {
-        final List<Olingo4BatchRequest> batchParts = new ArrayList<Olingo4BatchRequest>();
+        final List<Olingo4BatchRequest> batchParts = new ArrayList<>();
 
         // 1. Edm query
         batchParts.add(Olingo4BatchQueryRequest.resourcePath(Constants.METADATA).resourceUri(TEST_SERVICE_BASE_URL).build());
@@ -163,7 +211,7 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
         batchParts.add(Olingo4BatchQueryRequest.resourcePath(TEST_PEOPLE).resourceUri(TEST_SERVICE_BASE_URL).build());
 
         // 4. Read with $top
-        final HashMap<String, String> queryParams = new HashMap<String, String>();
+        final HashMap<String, String> queryParams = new HashMap<>();
         queryParams.put(SystemQueryOptionKind.TOP.toString(), "5");
         batchParts.add(Olingo4BatchQueryRequest.resourcePath(PEOPLE).resourceUri(TEST_SERVICE_BASE_URL).queryParams(queryParams).build());
 
@@ -226,7 +274,7 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
     @SuppressWarnings("unchecked")
     @Test
     public void testEndpointHttpHeaders() throws Exception {
-        final Map<String, Object> headers = new HashMap<String, Object>();
+        final Map<String, Object> headers = new HashMap<>();
         final ClientEntity entity = (ClientEntity)requestBodyAndHeaders("direct://read-etag", null, headers);
         
         MockEndpoint mockEndpoint = getMockEndpoint("mock:check-etag-header");
@@ -236,7 +284,7 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
         Map<String, String> responseHttpHeaders = (Map<String, String>)mockEndpoint.getExchanges().get(0).getIn().getHeader("CamelOlingo4.responseHttpHeaders");
         assertEquals(responseHttpHeaders.get("ETag"), entity.getETag());
         
-        Map<String, String> endpointHttpHeaders = new HashMap<String, String>();
+        Map<String, String> endpointHttpHeaders = new HashMap<>();
         endpointHttpHeaders.put("If-Match", entity.getETag());
         headers.put("CamelOlingo4.endpointHttpHeaders", endpointHttpHeaders);
         requestBodyAndHeaders("direct://delete-with-etag", null, headers);
@@ -269,6 +317,8 @@ public class Olingo4ComponentTest extends AbstractOlingo4TestSupport {
                 from("direct://readcomplexprop").to("olingo4://read/Airports('KSFO')/Location");
 
                 from("direct://readentitybyid").to("olingo4://read/People('russellwhyte')");
+                
+                from("direct://readwithfilter").to("olingo4://read/Airports?$filter=Name eq 'San Francisco International Airport'");
 
                 from("direct://callunboundfunction").to("olingo4://read/GetNearestAirport(lat=33,lon=-118)");
 

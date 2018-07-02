@@ -32,7 +32,7 @@ import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
 public abstract class BaseDockerHeaderTest<T> extends CamelTestSupport {
@@ -122,7 +122,7 @@ public abstract class BaseDockerHeaderTest<T> extends CamelTestSupport {
     }
 
     protected Map<String, Object> getDefaultParameters() {
-        Map<String, Object> parameters = new HashMap<String, Object>();
+        Map<String, Object> parameters = new HashMap<>();
         parameters.put(DockerConstants.DOCKER_HOST, getHost());
         parameters.put(DockerConstants.DOCKER_PORT, getPort());
         parameters.put(DockerConstants.DOCKER_EMAIL, getEmail());

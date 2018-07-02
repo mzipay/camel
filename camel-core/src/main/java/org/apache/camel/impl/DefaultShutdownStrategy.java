@@ -154,7 +154,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
     }
 
     public boolean shutdown(CamelContext context, RouteStartupOrder route, long timeout, TimeUnit timeUnit, boolean abortAfterTimeout) throws Exception {
-        List<RouteStartupOrder> routes = new ArrayList<RouteStartupOrder>(1);
+        List<RouteStartupOrder> routes = new ArrayList<>(1);
         routes.add(route);
         return doShutdown(context, routes, timeout, timeUnit, false, abortAfterTimeout, false);
     }
@@ -179,7 +179,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
         StopWatch watch = new StopWatch();
 
         // at first sort according to route startup order
-        List<RouteStartupOrder> routesOrdered = new ArrayList<RouteStartupOrder>(routes);
+        List<RouteStartupOrder> routesOrdered = new ArrayList<>(routes);
         routesOrdered.sort(new Comparator<RouteStartupOrder>() {
             public int compare(RouteStartupOrder o1, RouteStartupOrder o2) {
                 return o1.getStartupOrder() - o2.getStartupOrder();
@@ -190,9 +190,9 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
         }
 
         if (suspendOnly) {
-            LOG.info("Starting to graceful suspend " + routesOrdered.size() + " routes (timeout " + timeout + " " + timeUnit.toString().toLowerCase(Locale.ENGLISH) + ")");
+            LOG.info("Starting to graceful suspend {} routes (timeout {} {})", routesOrdered.size(), timeout, timeUnit.toString().toLowerCase(Locale.ENGLISH));
         } else {
-            LOG.info("Starting to graceful shutdown " + routesOrdered.size() + " routes (timeout " + timeout + " " + timeUnit.toString().toLowerCase(Locale.ENGLISH) + ")");
+            LOG.info("Starting to graceful shutdown {} routes (timeout {} {})", routesOrdered.size(), timeout, timeUnit.toString().toLowerCase(Locale.ENGLISH));
         }
 
         // use another thread to perform the shutdowns so we can support timeout
@@ -257,7 +257,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
         // convert to seconds as its easier to read than a big milli seconds number
         long seconds = TimeUnit.SECONDS.convert(watch.taken(), TimeUnit.MILLISECONDS);
 
-        LOG.info("Graceful shutdown of " + routesOrdered.size() + " routes completed in " + seconds + " seconds");
+        LOG.info("Graceful shutdown of {} routes completed in {} seconds", routesOrdered.size(), seconds);
         return true;
     }
 
@@ -453,7 +453,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
             // include error handlers as we want to prepare them for shutdown as well
             list = ServiceHelper.getChildServices(service, true);
         } else {
-            list = new LinkedHashSet<Service>(1);
+            list = new LinkedHashSet<>(1);
             list.add(service);
         }
 
@@ -532,7 +532,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
 
             // list of deferred consumers to shutdown when all exchanges has been completed routed
             // and thus there are no more inflight exchanges so they can be safely shutdown at that time
-            List<ShutdownDeferredConsumer> deferredConsumers = new ArrayList<ShutdownDeferredConsumer>();
+            List<ShutdownDeferredConsumer> deferredConsumers = new ArrayList<>();
             for (RouteStartupOrder order : routes) {
 
                 ShutdownRoute shutdownRoute = order.getRoute().getRouteContext().getShutdownRoute();
@@ -603,7 +603,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
             while (!done && !timeoutOccurred.get()) {
                 int size = 0;
                 // number of inflights per route
-                final Map<String, Integer> routeInflight = new LinkedHashMap<String, Integer>();
+                final Map<String, Integer> routeInflight = new LinkedHashMap<>();
 
                 for (RouteStartupOrder order : routes) {
                     int inflight = context.getInflightRepository().size(order.getRoute().getId());
@@ -726,11 +726,11 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
         }
 
         // filter so inflight must start from any of the routes
-        Set<String> routeIds = new HashSet<String>();
+        Set<String> routeIds = new HashSet<>();
         for (RouteStartupOrder route : routes) {
             routeIds.add(route.getRoute().getId());
         }
-        Collection<InflightRepository.InflightExchange> filtered = new ArrayList<InflightRepository.InflightExchange>();
+        Collection<InflightRepository.InflightExchange> filtered = new ArrayList<>();
         for (InflightRepository.InflightExchange inflight : inflights) {
             String routeId = inflight.getExchange().getFromRouteId();
             if (routeIds.contains(routeId)) {

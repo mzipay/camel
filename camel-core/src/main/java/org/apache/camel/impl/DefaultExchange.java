@@ -317,7 +317,7 @@ public final class DefaultExchange implements Exchange {
     public Message getOut() {
         // lazy create
         if (out == null) {
-            out = (in != null && in instanceof MessageSupport)
+            out = (in instanceof MessageSupport)
                 ? ((MessageSupport)in).newInstance() : new DefaultMessage(getContext());
             configureMessage(out);
         }
@@ -349,6 +349,23 @@ public final class DefaultExchange implements Exchange {
         this.out = out;
         configureMessage(out);
     }
+
+    public Message getMessage() {
+        return hasOut() ? getOut() : getIn();
+    }
+
+    public <T> T getMessage(Class<T> type) {
+        return hasOut() ? getOut(type) : getIn(type);
+    }
+
+    public void setMessage(Message message) {
+        if (hasOut()) {
+            setOut(message);
+        } else {
+            setIn(message);
+        }
+    }
+
 
     public Exception getException() {
         return exception;
@@ -477,7 +494,7 @@ public final class DefaultExchange implements Exchange {
             // unit of work not yet registered so we store the on completion temporary
             // until the unit of work is assigned to this exchange by the unit of work
             if (onCompletions == null) {
-                onCompletions = new ArrayList<Synchronization>();
+                onCompletions = new ArrayList<>();
             }
             onCompletions.add(onCompletion);
         } else {
@@ -512,7 +529,7 @@ public final class DefaultExchange implements Exchange {
     public List<Synchronization> handoverCompletions() {
         List<Synchronization> answer = null;
         if (onCompletions != null) {
-            answer = new ArrayList<Synchronization>(onCompletions);
+            answer = new ArrayList<>(onCompletions);
             onCompletions.clear();
             onCompletions = null;
         }

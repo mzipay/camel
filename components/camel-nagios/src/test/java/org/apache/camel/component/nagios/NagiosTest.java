@@ -24,7 +24,6 @@ import com.googlecode.jsendnsca.MessagePayload;
 import com.googlecode.jsendnsca.NagiosPassiveCheckSender;
 import com.googlecode.jsendnsca.PassiveCheckSender;
 
-import org.apache.camel.Producer;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.junit4.CamelTestSupport;
@@ -150,7 +149,7 @@ public class NagiosTest extends CamelTestSupport {
         mock.expectedMessageCount(1);
         mock.expectedBodiesReceived("Hello Nagios");
 
-        Map<String, Object> headers = new HashMap<String, Object>();
+        Map<String, Object> headers = new HashMap<>();
         headers.put(NagiosConstants.LEVEL, "CRITICAL");
         headers.put(NagiosConstants.HOST_NAME, "myHost");
         headers.put(NagiosConstants.SERVICE_NAME, "myService");
@@ -169,12 +168,12 @@ public class NagiosTest extends CamelTestSupport {
 
                 NagiosComponent nagiosComponent = new NagiosComponent();
                 nagiosComponent.setCamelContext(context);
-                NagiosEndpoint nagiousEndpoint = (NagiosEndpoint) nagiosComponent.createEndpoint(uri);
-                nagiousEndpoint.setSender(nagiosPassiveCheckSender);
-                Producer nagiosProducer = nagiousEndpoint.createProducer();
+                NagiosEndpoint nagiosEndpoint = (NagiosEndpoint) nagiosComponent.createEndpoint(uri);
+                nagiosEndpoint.setSender(nagiosPassiveCheckSender);
+                nagiosEndpoint.createProducer();
 
                 from("direct:start")
-                        .to(nagiousEndpoint)
+                        .to(nagiosEndpoint)
                         .to("mock:result");
             }
         };

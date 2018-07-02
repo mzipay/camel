@@ -63,9 +63,14 @@ public interface ConnectorComponent extends Component {
     String getConnectorName();
 
     /**
-     * Gets the connector component name (component scheme)
+     * Gets the connector component name
      */
     String getComponentName();
+
+    /**
+     * Gets the connector component scheme
+     */
+    String getComponentScheme();
 
     /**
      * Gets the camel-connector JSon file.
@@ -92,6 +97,7 @@ public interface ConnectorComponent extends Component {
      *
      * @deprecated use {@link #setOptions(Map)} instead
      */
+    @Deprecated
     default void setComponentOptions(Map<String, Object> options) {
         setOptions(options);
     }

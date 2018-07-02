@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.xml.namespace.QName;
 import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -44,6 +45,7 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.CamelContextAware;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.NoTypeConversionAvailableException;
@@ -83,7 +85,7 @@ import static org.apache.camel.builder.xml.Namespaces.isMatchingNamespaceOrEmpty
  *
  * @see XPathConstants#NODESET
  */
-public class XPathBuilder extends ServiceSupport implements Expression, Predicate, NamespaceAware {
+public class XPathBuilder extends ServiceSupport implements CamelContextAware, Expression, Predicate, NamespaceAware {
     private static final Logger LOG = LoggerFactory.getLogger(XPathBuilder.class);
     private static final String SAXON_OBJECT_MODEL_URI = "http://saxon.sf.net/jaxp/xpath/om";
     private static final String SAXON_FACTORY_CLASS_NAME = "net.sf.saxon.xpath.XPathFactoryImpl";
@@ -91,12 +93,13 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
 
     private static volatile XPathFactory defaultXPathFactory;
 
-    private final Queue<XPathExpression> pool = new ConcurrentLinkedQueue<XPathExpression>();
-    private final Queue<XPathExpression> poolLogNamespaces = new ConcurrentLinkedQueue<XPathExpression>();
+    private CamelContext camelContext;
+    private final Queue<XPathExpression> pool = new ConcurrentLinkedQueue<>();
+    private final Queue<XPathExpression> poolLogNamespaces = new ConcurrentLinkedQueue<>();
     private final String text;
-    private final ThreadLocal<Exchange> exchange = new ThreadLocal<Exchange>();
+    private final ThreadLocal<Exchange> exchange = new ThreadLocal<>();
     private final MessageVariableResolver variableResolver = new MessageVariableResolver(exchange);
-    private final Map<String, String> namespaces = new ConcurrentHashMap<String, String>();
+    private final Map<String, String> namespaces = new ConcurrentHashMap<>();
     private boolean threadSafety;
     private volatile XPathFactory xpathFactory;
     private volatile Class<?> documentType = Document.class;
@@ -145,13 +148,25 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
      */
     public static XPathBuilder xpath(String text, Class<?> resultType) {
         XPathBuilder builder = new XPathBuilder(text);
-        builder.setResultType(resultType);
+        if (resultType != null) {
+            builder.setResultType(resultType);
+        }
         return builder;
     }
 
     @Override
     public String toString() {
         return "XPath: " + text;
+    }
+
+    @Override
+    public CamelContext getCamelContext() {
+        return camelContext;
+    }
+
+    @Override
+    public void setCamelContext(CamelContext camelContext) {
+        this.camelContext = camelContext;
     }
 
     public boolean matches(Exchange exchange) {
@@ -782,7 +797,6 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
     public void enableSaxon() {
         this.setObjectModelUri(SAXON_OBJECT_MODEL_URI);
         this.setFactoryClassName(SAXON_FACTORY_CLASS_NAME);
-
     }
 
     public String getObjectModelUri() {
@@ -870,6 +884,15 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
             } else if (document instanceof DOMSource) {
                 DOMSource source = (DOMSource) document;
                 answer = (NodeList) xpathExpression.evaluate(source.getNode(), XPathConstants.NODESET);
+            } else if (document instanceof SAXSource) {
+                SAXSource source = (SAXSource) document;
+                // since its a SAXSource it may not return an NodeList (for example if using Saxon)
+                Object result = xpathExpression.evaluate(source.getInputSource(), XPathConstants.NODESET);
+                if (result instanceof NodeList) {
+                    answer = (NodeList) result;
+                } else {
+                    answer = null;
+                }
             } else {
                 answer = (NodeList) xpathExpression.evaluate(document, XPathConstants.NODESET);
             }
@@ -887,7 +910,7 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
     }
 
     private void logDiscoveredNamespaces(NodeList namespaces) {
-        Map<String, HashSet<String>> map = new LinkedHashMap<String, HashSet<String>>();
+        Map<String, HashSet<String>> map = new LinkedHashMap<>();
         for (int i = 0; i < namespaces.getLength(); i++) {
             Node n = namespaces.item(i);
             if (n.getNodeName().equals("xmlns:xml")) {
@@ -1256,15 +1279,33 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
     protected synchronized XPathFactory createXPathFactory() throws XPathFactoryConfigurationException {
         if (objectModelUri != null) {
             String xpathFactoryClassName = factoryClassName;
-            if (objectModelUri.equals(SAXON_OBJECT_MODEL_URI) && ObjectHelper.isEmpty(xpathFactoryClassName)) {
-                xpathFactoryClassName = SAXON_FACTORY_CLASS_NAME;
+            if (objectModelUri.equals(SAXON_OBJECT_MODEL_URI) && (xpathFactoryClassName == null || SAXON_FACTORY_CLASS_NAME.equals(xpathFactoryClassName))) {
+                // from Saxon 9.7 onwards you should favour to create the class directly
+                // https://www.saxonica.com/html/documentation/xpath-api/jaxp-xpath/factory.html
+                try {
+                    if (camelContext != null) {
+                        Class<XPathFactory> clazz = camelContext.getClassResolver().resolveClass(SAXON_FACTORY_CLASS_NAME, XPathFactory.class);
+                        if (clazz != null) {
+                            LOG.debug("Creating Saxon XPathFactory using class: {})", clazz);
+                            xpathFactory = camelContext.getInjector().newInstance(clazz);
+                            LOG.info("Created Saxon XPathFactory: {}", xpathFactory);
+                        }
+                    }
+                } catch (Throwable e) {
+                    LOG.warn("Attempted to create Saxon XPathFactory by creating a new instance of " + SAXON_FACTORY_CLASS_NAME
+                        + " failed. Will fallback and create XPathFactory using JDK API. This exception is ignored (stacktrace in DEBUG logging level).");
+                    LOG.debug("Error creating Saxon XPathFactory. This exception is ignored.", e);
+                }
             }
 
-            xpathFactory = ObjectHelper.isEmpty(xpathFactoryClassName)
-                ? XPathFactory.newInstance(objectModelUri)
-                : XPathFactory.newInstance(objectModelUri, xpathFactoryClassName, null);
+            if (xpathFactory == null) {
+                LOG.debug("Creating XPathFactory from objectModelUri: {}", objectModelUri);
+                xpathFactory = ObjectHelper.isEmpty(xpathFactoryClassName)
+                    ? XPathFactory.newInstance(objectModelUri)
+                    : XPathFactory.newInstance(objectModelUri, xpathFactoryClassName, null);
+                LOG.info("Created XPathFactory: {} from objectModelUri: {}", xpathFactory, objectModelUri);
+            }
 
-            LOG.info("Using objectModelUri " + objectModelUri + " when created XPathFactory {}", xpathFactory);
             return xpathFactory;
         }
 

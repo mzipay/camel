@@ -19,6 +19,7 @@ package org.apache.camel.component.undertow;
 import java.net.URI;
 
 import io.undertow.Undertow;
+import io.undertow.UndertowOptions;
 import io.undertow.server.HttpHandler;
 
 import org.apache.camel.component.undertow.handlers.CamelRootHandler;
@@ -32,9 +33,9 @@ import org.slf4j.LoggerFactory;
 public class DefaultUndertowHost implements UndertowHost {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultUndertowHost.class);
 
-    private UndertowHostKey key;
-    private UndertowHostOptions options;
-    private CamelRootHandler rootHandler;
+    private final UndertowHostKey key;
+    private final UndertowHostOptions options;
+    private final CamelRootHandler rootHandler;
     private Undertow undertow;
     private String hostString;
 
@@ -54,7 +55,7 @@ public class DefaultUndertowHost implements UndertowHost {
     }
 
     @Override
-    public synchronized void registerHandler(HttpHandlerRegistrationInfo registrationInfo, HttpHandler handler) {
+    public synchronized HttpHandler registerHandler(HttpHandlerRegistrationInfo registrationInfo, HttpHandler handler) {
         if (undertow == null) {
             Undertow.Builder builder = Undertow.builder();
             if (key.getSslContext() != null) {
@@ -75,6 +76,9 @@ public class DefaultUndertowHost implements UndertowHost {
                 }
                 if (options.getDirectBuffers() != null) {
                     builder.setDirectBuffers(options.getDirectBuffers());
+                }
+                if (options.getHttp2Enabled() != null) {
+                    builder.setServerOption(UndertowOptions.ENABLE_HTTP2, options.getHttp2Enabled());
                 }
             }
 
@@ -99,11 +103,7 @@ public class DefaultUndertowHost implements UndertowHost {
                 throw e;
             }
         }
-
-        String path = registrationInfo.getUri().getPath();
-        String methods = registrationInfo.getMethodRestrict();
-        boolean prefixMatch = registrationInfo.isMatchOnUriPrefix();
-        rootHandler.add(path, methods != null ? methods.split(",") : null, prefixMatch, handler);
+        return rootHandler.add(registrationInfo.getUri().getPath(), registrationInfo.getMethodRestrict(), registrationInfo.isMatchOnUriPrefix(), handler);
     }
 
     @Override
@@ -112,10 +112,7 @@ public class DefaultUndertowHost implements UndertowHost {
             return;
         }
 
-        String path = registrationInfo.getUri().getPath();
-        String methods = registrationInfo.getMethodRestrict();
-        boolean prefixMatch = registrationInfo.isMatchOnUriPrefix();
-        rootHandler.remove(path, methods != null ? methods.split(",") : null, prefixMatch);
+        rootHandler.remove(registrationInfo.getUri().getPath(), registrationInfo.getMethodRestrict(), registrationInfo.isMatchOnUriPrefix());
 
         if (rootHandler.isEmpty()) {
             LOG.info("Stopping Undertow server on {}://{}:{}", key.getSslContext() != null ? "https" : "http", key.getHost(), key.getPort());

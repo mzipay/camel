@@ -50,6 +50,8 @@ public class DataFormatsDefinition {
         @XmlElement(required = false, name = "csv", type = CsvDataFormat.class),
         // TODO: Camel 3.0 - Should be named customDataFormat to avoid naming clash with custom loadbalancer
         @XmlElement(required = false, name = "custom", type = CustomDataFormat.class),
+        @XmlElement(required = false, name = "fhirJson", type = FhirJsonDataFormat.class),
+        @XmlElement(required = false, name = "fhirXml", type = FhirXmlDataFormat.class),
         @XmlElement(required = false, name = "flatpack", type = FlatpackDataFormat.class),
         @XmlElement(required = false, name = "gzip", type = GzipDataFormat.class),
         @XmlElement(required = false, name = "hessian", type = HessianDataFormat.class),
@@ -100,7 +102,7 @@ public class DataFormatsDefinition {
      * @return A Map of the contained DataFormatType's indexed by id.
      */
     public Map<String, DataFormatDefinition> asMap() {
-        Map<String, DataFormatDefinition> dataFormatsAsMap = new HashMap<String, DataFormatDefinition>();
+        Map<String, DataFormatDefinition> dataFormatsAsMap = new HashMap<>();
         for (DataFormatDefinition dataFormatType : getDataFormats()) {
             dataFormatsAsMap.put(dataFormatType.getId(), dataFormatType);
         }

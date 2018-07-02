@@ -17,13 +17,15 @@
 package org.apache.camel.component.aws.lambda;
 
 import com.amazonaws.services.lambda.AWSLambda;
+
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 import org.apache.camel.spi.UriPath;
 
 @UriParams
-public class LambdaConfiguration {
+public class LambdaConfiguration implements Cloneable {
 
     @UriPath
     @Metadata(required = "true")
@@ -31,12 +33,12 @@ public class LambdaConfiguration {
     @UriParam
     @Metadata(required = "true")
     private LambdaOperations operation;
-    @UriParam
-    private String awsLambdaEndpoint;
     @UriParam(label = "security", secret = true)
     private String accessKey;
     @UriParam(label = "security", secret = true)
     private String secretKey;
+    @UriParam(label = "producer")
+    private String region;
     @UriParam(label = "proxy")
     private String proxyHost;
     @UriParam(label = "proxy")
@@ -88,15 +90,15 @@ public class LambdaConfiguration {
         this.secretKey = secretKey;
     }
 
-    public String getAwsLambdaEndpoint() {
-        return awsLambdaEndpoint;
+    public String getRegion() {
+        return region;
     }
 
     /**
-     * The region with which the AWS-Lambda client wants to work with.
+     * Amazon AWS Region
      */
-    public void setAwsLambdaEndpoint(String awsLambdaEndpoint) {
-        this.awsLambdaEndpoint = awsLambdaEndpoint;
+    public void setRegion(String region) {
+        this.region = region;
     }
 
     public LambdaOperations getOperation() {
@@ -130,6 +132,18 @@ public class LambdaConfiguration {
 
     public void setProxyPort(Integer proxyPort) {
         this.proxyPort = proxyPort;
+    }
+    
+    // *************************************************
+    //
+    // *************************************************
+
+    public LambdaConfiguration copy() {
+        try {
+            return (LambdaConfiguration)super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeCamelException(e);
+        }
     }
 
 }

@@ -83,7 +83,7 @@ import org.slf4j.LoggerFactory;
 public class CamelInternalProcessor extends DelegateAsyncProcessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(CamelInternalProcessor.class);
-    private final List<CamelInternalProcessorAdvice> advices = new ArrayList<CamelInternalProcessorAdvice>();
+    private final List<CamelInternalProcessorAdvice> advices = new ArrayList<>();
 
     public CamelInternalProcessor() {
     }
@@ -822,7 +822,7 @@ public class CamelInternalProcessor extends DelegateAsyncProcessor {
             } else {
                 body = exchange.getIn().getBody();
             }
-            if (body != null && body instanceof StreamCache) {
+            if (body instanceof StreamCache) {
                 // reset so the cache is ready to be reused after processing
                 ((StreamCache) body).reset();
             }

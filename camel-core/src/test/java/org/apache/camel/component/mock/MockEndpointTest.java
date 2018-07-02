@@ -680,6 +680,66 @@ public class MockEndpointTest extends ContextTestSupport {
         assertMockEndpointsSatisfied();
     }
 
+    public void testNotExchangePattern() throws Exception {
+        MockEndpoint mock = getMockEndpoint("mock:result");
+        mock.expectedMessageCount(2);
+        mock.message(0).exchangePattern().isEqualTo(ExchangePattern.InOnly);
+        mock.message(1).exchangePattern().isEqualTo(ExchangePattern.InOnly);
+
+        template.sendBody("direct:a", "Hello World");
+        template.requestBody("direct:a", "Bye World");
+
+        mock.assertIsNotSatisfied();
+    }
+
+    public void testBodyPredicate() throws Exception {
+        MockEndpoint mock = getMockEndpoint("mock:result");
+        mock.expectedMessageCount(2);
+        mock.message(0).body().matches().constant("Hello World");
+        mock.message(1).body().matches().constant("Bye World");
+
+        template.sendBodyAndHeader("direct:a", "Hello World", "foo", 123);
+        template.sendBodyAndHeader("direct:a", "Bye World", "bar", 234);
+
+        assertMockEndpointsSatisfied();
+    }
+
+    public void testNotBodyPredicate() throws Exception {
+        MockEndpoint mock = getMockEndpoint("mock:result");
+        mock.expectedMessageCount(2);
+        mock.message(0).body().matches().constant("Hello World");
+        mock.message(1).body().matches().constant("Hi World");
+
+        template.sendBodyAndHeader("direct:a", "Hello World", "foo", 123);
+        template.sendBodyAndHeader("direct:a", "Bye World", "bar", 234);
+
+        mock.assertIsNotSatisfied();
+    }
+
+    public void testHeaderPredicate() throws Exception {
+        MockEndpoint mock = getMockEndpoint("mock:result");
+        mock.expectedMessageCount(2);
+        mock.message(0).header("foo").matches().constant(123);
+        mock.message(1).header("bar").matches().constant(234);
+
+        template.sendBodyAndHeader("direct:a", "Hello World", "foo", 123);
+        template.sendBodyAndHeader("direct:a", "Bye World", "bar", 234);
+
+        assertMockEndpointsSatisfied();
+    }
+
+    public void testNotHeaderPredicate() throws Exception {
+        MockEndpoint mock = getMockEndpoint("mock:result");
+        mock.expectedMessageCount(2);
+        mock.message(0).header("foo").matches().constant(123);
+        mock.message(1).header("bar").matches().constant(666);
+
+        template.sendBodyAndHeader("direct:a", "Hello World", "foo", 123);
+        template.sendBodyAndHeader("direct:a", "Bye World", "bar", 234);
+
+        mock.assertIsNotSatisfied();
+    }
+
     public void testExpectedExchangePattern() throws Exception {
         MockEndpoint mock = getMockEndpoint("mock:result");
         mock.expectedMessageCount(1);
@@ -705,7 +765,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "beer");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", "beer");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -719,7 +779,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "beer");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", "beer");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -734,7 +794,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", null);
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
 
@@ -749,7 +809,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "Test");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", is);
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -763,7 +823,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "beer");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 456);
         map.put("bar", "beer");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -777,7 +837,7 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "beer");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", "wine");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -791,12 +851,12 @@ public class MockEndpointTest extends ContextTestSupport {
         mock.expectedHeaderReceived("foo", 123);
         mock.expectedHeaderReceived("bar", "beer");
 
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", "beer");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
 
-        map = new HashMap<String, Object>();
+        map = new HashMap<>();
         map.put("foo", 123);
         map.put("bar", "wine");
         template.sendBodyAndHeaders("direct:a", "Hello World", map);
@@ -1111,7 +1171,7 @@ public class MockEndpointTest extends ContextTestSupport {
     }
 
     protected Object[] listOfMessages(int... counters) {
-        List<String> list = new ArrayList<String>(counters.length);
+        List<String> list = new ArrayList<>(counters.length);
         for (int counter : counters) {
             list.add(createTestMessage(counter));
         }

@@ -125,7 +125,7 @@ public final class MessageHelper {
             return;
         }
         Object body = message.getBody();
-        if (body != null && body instanceof StreamCache) {
+        if (body instanceof StreamCache) {
             ((StreamCache) body).reset();
         }
     }
@@ -423,7 +423,7 @@ public final class MessageHelper {
             sb.append(prefix);
             sb.append("  <headers>\n");
             // sort the headers so they are listed A..Z
-            Map<String, Object> headers = new TreeMap<String, Object>(message.getHeaders());
+            Map<String, Object> headers = new TreeMap<>(message.getHeaders());
             for (Map.Entry<String, Object> entry : headers.entrySet()) {
                 Object value = entry.getValue();
                 String type = ObjectHelper.classCanonicalName(value);

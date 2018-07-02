@@ -23,8 +23,8 @@ import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.api.management.ManagedAttribute;
 import org.apache.camel.api.management.ManagedResource;
-import org.apache.camel.ha.CamelClusterService;
-import org.apache.camel.ha.CamelClusterView;
+import org.apache.camel.cluster.CamelClusterService;
+import org.apache.camel.cluster.CamelClusterView;
 import org.apache.camel.impl.DefaultEndpoint;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
@@ -45,8 +45,8 @@ import org.apache.camel.spi.UriPath;
     lenientProperties = true,
     label = "clustering")
 public class MasterEndpoint extends DefaultEndpoint implements DelegateEndpoint {
-
     private final Endpoint delegateEndpoint;
+    private final CamelClusterService clusterService;
 
     @UriPath(description = "The name of the cluster namespace to use")
     @Metadata(required = "true")
@@ -55,8 +55,6 @@ public class MasterEndpoint extends DefaultEndpoint implements DelegateEndpoint 
     @UriPath(description = "The endpoint uri to use in master/slave mode")
     @Metadata(required = "true")
     private final String delegateUri;
-
-    private final CamelClusterService clusterService;
 
     public MasterEndpoint(String uri, MasterComponent component, CamelClusterService clusterService, String namespace, String delegateUri) {
         super(uri, component);
@@ -69,7 +67,6 @@ public class MasterEndpoint extends DefaultEndpoint implements DelegateEndpoint 
 
     @Override
     public Producer createProducer() throws Exception {
-        getComponent();
         throw new UnsupportedOperationException("Cannot produce from this endpoint");
     }
 

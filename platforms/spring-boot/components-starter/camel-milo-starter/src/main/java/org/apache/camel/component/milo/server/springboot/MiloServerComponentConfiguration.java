@@ -42,7 +42,7 @@ public class MiloServerComponentConfiguration
             ComponentConfigurationPropertiesCommon {
 
     /**
-     * The URI of the namespace defaults to urn:org:apache:camel
+     * The URI of the namespace, defaults to urn:org:apache:camel
      */
     private String namespaceUri;
     /**
@@ -82,14 +82,18 @@ public class MiloServerComponentConfiguration
      */
     private Collection<String> securityPoliciesById;
     /**
-     * Set user password combinations in the form of user1:pwd1user2:pwd2
+     * Set user password combinations in the form of user1:pwd1,user2:pwd2
      * Usernames and passwords will be URL decoded
      */
     private String userAuthenticationCredentials;
     /**
-     * Enable anonymous authentication disabled by default
+     * Enable anonymous authentication, disabled by default
      */
     private Boolean enableAnonymousAuthentication = false;
+    /**
+     * Set the UserTokenPolicy used when
+     */
+    private SecurityPolicy usernameSecurityPolicyUri;
     /**
      * Set the addresses of the local addresses the server should bind to
      */
@@ -220,6 +224,15 @@ public class MiloServerComponentConfiguration
     public void setEnableAnonymousAuthentication(
             Boolean enableAnonymousAuthentication) {
         this.enableAnonymousAuthentication = enableAnonymousAuthentication;
+    }
+
+    public SecurityPolicy getUsernameSecurityPolicyUri() {
+        return usernameSecurityPolicyUri;
+    }
+
+    public void setUsernameSecurityPolicyUri(
+            SecurityPolicy usernameSecurityPolicyUri) {
+        this.usernameSecurityPolicyUri = usernameSecurityPolicyUri;
     }
 
     public String getBindAddresses() {

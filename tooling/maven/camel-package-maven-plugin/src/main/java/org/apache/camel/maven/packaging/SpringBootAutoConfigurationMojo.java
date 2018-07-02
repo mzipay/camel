@@ -78,7 +78,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
-import org.springframework.boot.bind.RelaxedPropertyResolver;
 import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
@@ -420,6 +419,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
                 type = "java.util.Map<java.lang.String, java.lang.Object>";
             }
 
+            // to avoid ugly names such as c-o-r-s
             if ("enableCORS".equalsIgnoreCase(name)) {
                 name = "enableCors";
             }
@@ -555,7 +555,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         // find the component names
         List<String> componentNames = findComponentNames();
 
-        final Set<File> jsonFiles = new TreeSet<File>();
+        final Set<File> jsonFiles = new TreeSet<>();
         PackageHelper.findJsonFiles(buildDir, jsonFiles, new PackageHelper.CamelComponentsModelFilter());
 
         // create auto configuration for the components
@@ -603,7 +603,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         // find the data format names
         List<String> dataFormatNames = findDataFormatNames();
 
-        final Set<File> jsonFiles = new TreeSet<File>();
+        final Set<File> jsonFiles = new TreeSet<>();
         // we can reuse the component model filter
         PackageHelper.findJsonFiles(buildDir, jsonFiles, new PackageHelper.CamelComponentsModelFilter());
 
@@ -649,7 +649,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         // find the language names
         List<String> languageNames = findLanguageNames();
 
-        final Set<File> jsonFiles = new TreeSet<File>();
+        final Set<File> jsonFiles = new TreeSet<>();
         // we can reuse the component model filter
         PackageHelper.findJsonFiles(buildDir, jsonFiles, new PackageHelper.CamelComponentsModelFilter());
 
@@ -790,7 +790,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
                 final PropertySource<JavaClassSource> prop = innerClass.addProperty(optionType, sourceProp.getName());
 
                 boolean anEnum;
-                Class optionClass;
+                Class<?> optionClass;
                 if (!propType.isArray()) {
                     optionClass = loadClass(projectClassLoader, optionType);
                     anEnum = optionClass.isEnum();
@@ -930,8 +930,8 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
     }
 
     // try loading class, looking for inner classes if needed
-    private Class loadClass(ClassLoader projectClassLoader, String loadClassName) throws MojoFailureException {
-        Class optionClass;
+    private Class<?> loadClass(ClassLoader projectClassLoader, String loadClassName) throws MojoFailureException {
+        Class<?> optionClass;
         while (true) {
             try {
                 optionClass = projectClassLoader.loadClass(loadClassName);
@@ -962,7 +962,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
     }
 
     protected ClassLoader getProjectClassLoader() throws MojoFailureException {
-        final List classpathElements;
+        final List<?> classpathElements;
         try {
             classpathElements = project.getTestClasspathElements();
         } catch (org.apache.maven.artifact.DependencyResolutionRequiredException e) {
@@ -970,7 +970,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         }
         final URL[] urls = new URL[classpathElements.size()];
         int i = 0;
-        for (Iterator it = classpathElements.iterator(); it.hasNext(); i++) {
+        for (Iterator<?> it = classpathElements.iterator(); it.hasNext(); i++) {
             try {
                 urls[i] = new File((String) it.next()).toURI().toURL();
             } catch (MalformedURLException e) {
@@ -1702,7 +1702,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         return sb.toString();
     }
 
-    private static void sortImports(Importer importer) {
+    private static void sortImports(Importer<JavaClassSource> importer) {
         // sort imports
         List<Import> imports = importer.getImports();
 
@@ -1983,7 +1983,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
     }
 
     private List<String> findComponentNames() {
-        List<String> componentNames = new ArrayList<String>();
+        List<String> componentNames = new ArrayList<>();
         for (Resource r : project.getBuild().getResources()) {
             File f = new File(r.getDirectory());
             if (!f.exists()) {
@@ -2011,7 +2011,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
     }
 
     private List<String> findDataFormatNames() {
-        List<String> dataFormatNames = new ArrayList<String>();
+        List<String> dataFormatNames = new ArrayList<>();
         for (Resource r : project.getBuild().getResources()) {
             File f = new File(r.getDirectory());
             if (!f.exists()) {
@@ -2039,7 +2039,7 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
     }
 
     private List<String> findLanguageNames() {
-        List<String> languageNames = new ArrayList<String>();
+        List<String> languageNames = new ArrayList<>();
         for (Resource r : project.getBuild().getResources()) {
             File f = new File(r.getDirectory());
             if (!f.exists()) {
@@ -2241,7 +2241,8 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         parentClass.addImport(ConditionMessage.class);
         parentClass.addImport(ConditionContext.class);
         parentClass.addImport(ConditionOutcome.class);
-        parentClass.addImport(RelaxedPropertyResolver.class);
+        parentClass.addImport("org.springframework.boot.context.properties.bind.Bindable");
+        parentClass.addImport("org.springframework.boot.context.properties.bind.Binder");
         parentClass.addImport(AnnotatedTypeMetadata.class);
         parentClass.addImport(SpringBootCondition.class);
 
@@ -2263,8 +2264,8 @@ public class SpringBootAutoConfigurationMojo extends AbstractMojo {
         isEnabled.addParameter(boolean.class, "defaultValue");
         isEnabled.setReturnType(boolean.class);
         isEnabled.setBody(new StringBuilder()
-            .append("RelaxedPropertyResolver resolver = new RelaxedPropertyResolver(context.getEnvironment(), prefix);\n")
-            .append("return resolver.getProperty(\"enabled\", Boolean.class, defaultValue);")
+            .append("String property = prefix.endsWith(\".\") ? prefix + \"enabled\" : prefix + \".enabled\";\n")
+            .append("return Binder.get(context.getEnvironment()).bind(property, Bindable.of(Boolean.class)).orElse(defaultValue);")
             .toString()
         );
 

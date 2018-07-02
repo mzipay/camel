@@ -43,7 +43,7 @@ public class MailConfiguration implements Cloneable {
 
     private ClassLoader applicationClassLoader;
     private Properties javaMailProperties;
-    private Map<Message.RecipientType, String> recipients = new HashMap<Message.RecipientType, String>();
+    private Map<Message.RecipientType, String> recipients = new HashMap<>();
 
     // protocol is implied by component name so it should not be in UriPath
     private String protocol;
@@ -132,7 +132,7 @@ public class MailConfiguration implements Cloneable {
         try {
             MailConfiguration copy = (MailConfiguration) clone();
             // must set a new recipients map as clone just reuse the same reference
-            copy.recipients = new HashMap<Message.RecipientType, String>();
+            copy.recipients = new HashMap<>();
             copy.recipients.putAll(this.recipients);
             return copy;
         } catch (CloneNotSupportedException e) {
@@ -510,7 +510,7 @@ public class MailConfiguration implements Cloneable {
      * Sets the To email address. Separate multiple email addresses with comma.
      */
     public void setTo(String address) {
-        this.to = to;
+        this.to = address;
         recipients.put(Message.RecipientType.TO, address);
     }
 

@@ -80,7 +80,7 @@ public class JettyHttpComponent9 extends JettyHttpComponent {
             }            
             HttpConnectionFactory httpFactory = new org.eclipse.jetty.server.HttpConnectionFactory(httpConfig); 
 
-            ArrayList<ConnectionFactory> connectionFactories = new ArrayList<ConnectionFactory>();
+            ArrayList<ConnectionFactory> connectionFactories = new ArrayList<>();
             ServerConnector result = new org.eclipse.jetty.server.ServerConnector(server);
             if (sslcf != null) {
                 httpConfig.addCustomizer(new org.eclipse.jetty.server.SecureRequestCustomizer());
@@ -90,7 +90,9 @@ public class JettyHttpComponent9 extends JettyHttpComponent {
                 result.setDefaultProtocol(scf.getProtocol());
             }
             connectionFactories.add(httpFactory);
-            result.setConnectionFactories(connectionFactories);
+            for (ConnectionFactory cf : connectionFactories) {
+                result.addConnectionFactory(cf);
+            }
             result.setPort(port);
             if (host != null) {
                 result.setHost(host);
@@ -98,7 +100,7 @@ public class JettyHttpComponent9 extends JettyHttpComponent {
             if (sslcf != null) {
                 if (getSslSocketConnectorProperties() != null && "https".equals(endpoint.getProtocol())) {
                     // must copy the map otherwise it will be deleted
-                    Map<String, Object> properties = new HashMap<String, Object>(getSslSocketConnectorProperties());
+                    Map<String, Object> properties = new HashMap<>(getSslSocketConnectorProperties());
                     IntrospectionSupport.setProperties(sslcf, properties);
                     if (properties.size() > 0) {
                         throw new IllegalArgumentException("There are " + properties.size()

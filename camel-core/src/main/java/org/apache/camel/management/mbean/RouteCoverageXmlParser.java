@@ -65,7 +65,7 @@ public final class RouteCoverageXmlParser {
         final DocumentBuilder docBuilder = docBuilderFactory.newDocumentBuilder();
         final Document doc = docBuilder.newDocument();
 
-        final Stack<Element> elementStack = new Stack<Element>();
+        final Stack<Element> elementStack = new Stack<>();
         final StringBuilder textBuffer = new StringBuilder();
         final DefaultHandler handler = new DefaultHandler() {
 
@@ -126,8 +126,10 @@ public final class RouteCoverageXmlParser {
                     }
                 }
 
-                // we do not want customId in output
-                el.removeAttribute("customId");
+                // we do not want customId in output of the EIPs
+                if (!"route".equals(qName)) {
+                    el.removeAttribute("customId");
+                }
 
                 elementStack.push(el);
             }

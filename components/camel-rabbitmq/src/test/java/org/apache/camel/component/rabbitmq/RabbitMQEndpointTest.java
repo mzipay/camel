@@ -19,10 +19,7 @@ package org.apache.camel.component.rabbitmq;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
@@ -76,10 +73,12 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
         String routingKey = UUID.randomUUID().toString();
         String exchangeName = UUID.randomUUID().toString();
         long tag = UUID.randomUUID().toString().hashCode();
+        Boolean redelivery = new Random().nextBoolean();
 
         Mockito.when(envelope.getRoutingKey()).thenReturn(routingKey);
         Mockito.when(envelope.getExchange()).thenReturn(exchangeName);
         Mockito.when(envelope.getDeliveryTag()).thenReturn(tag);
+        Mockito.when(envelope.isRedeliver()).thenReturn(redelivery);
         Mockito.when(properties.getHeaders()).thenReturn(null);
 
         byte[] body = new byte[20];
@@ -87,6 +86,7 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
         assertEquals(exchangeName, exchange.getIn().getHeader(RabbitMQConstants.EXCHANGE_NAME));
         assertEquals(routingKey, exchange.getIn().getHeader(RabbitMQConstants.ROUTING_KEY));
         assertEquals(tag, exchange.getIn().getHeader(RabbitMQConstants.DELIVERY_TAG));
+        assertEquals(redelivery, exchange.getIn().getHeader(RabbitMQConstants.REDELIVERY_TAG));
         assertEquals(body, exchange.getIn().getBody());
     }
 
@@ -95,11 +95,8 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
         RabbitMQEndpoint endpoint1 = context.getEndpoint("rabbitmq:localhost/", RabbitMQEndpoint.class);
         assertEquals("Get a wrong exchange name", "", endpoint1.getExchangeName());
 
-        RabbitMQEndpoint endpoint2 = context.getEndpoint("rabbitmq:localhost?autoAck=false", RabbitMQEndpoint.class);
-        assertEquals("Get a wrong exchange name", "", endpoint2.getExchangeName());
-
-        RabbitMQEndpoint endpoint3 = context.getEndpoint("rabbitmq:localhost/exchange", RabbitMQEndpoint.class);
-        assertEquals("Get a wrong exchange name", "exchange", endpoint3.getExchangeName());
+        RabbitMQEndpoint endpoint2 = context.getEndpoint("rabbitmq:localhost/exchange", RabbitMQEndpoint.class);
+        assertEquals("Get a wrong exchange name", "exchange", endpoint2.getExchangeName());
     }
 
     @Test
@@ -114,7 +111,7 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
         Mockito.when(envelope.getExchange()).thenReturn(exchangeName);
         Mockito.when(envelope.getDeliveryTag()).thenReturn(tag);
 
-        Map<String, Object> customHeaders = new HashMap<String, Object>();
+        Map<String, Object> customHeaders = new HashMap<>();
         customHeaders.put("stringHeader", "A string");
         customHeaders.put("bigDecimalHeader", new BigDecimal("12.34"));
         customHeaders.put("integerHeader", 42);
@@ -345,6 +342,12 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
     public void createEndpointWithExclusiveEnabled() throws Exception {
         RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?exclusive=true", RabbitMQEndpoint.class);
         assertTrue(endpoint.isExclusive());
+    }
+
+    @Test
+    public void createEndpointWithExclusiveConsumerEnabled() throws Exception {
+        RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?exclusiveConsumer=true", RabbitMQEndpoint.class);
+        assertTrue(endpoint.isExclusiveConsumer());
     }
 
     @Test
